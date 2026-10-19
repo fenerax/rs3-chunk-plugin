@@ -28,7 +28,7 @@ function M.style(get)
   local width = get("shadeWidth", "String", "normal"); if not M.WIDTHS[width] then width = "normal" end
   local walls = get("shadeWalls", "String", "low"); if not M.WALLS[walls] then walls = "low" end
   local grid = get("shadeGrid", "Bool", true) ~= false
-  local locked = get("shadeFillLocked", "String", "grey"); if not (M.FILLS[locked] or locked == "tint" or locked == "off") then locked = "grey" end
+  local locked = get("shadeFillLocked", "String", "dark"); if not (M.FILLS[locked] or locked == "tint" or locked == "off") then locked = "dark" end
   local rollable = get("shadeFillRollable", "String", "tint"); if not (rollable == "same" or rollable == "tint" or rollable == "off") then rollable = "tint" end
   local strength = get("shadeFillStrength", "String", "medium"); if not M.FILL_ALPHA[strength] then strength = "medium" end
   local shape = get("shadeFillStyle", "String", "haze"); if shape ~= "ground" then shape = "haze" end
@@ -36,7 +36,9 @@ function M.style(get)
   local fill = {locked = locked == "tint" and c[1] or M.FILLS[locked]}
   fill.available = rollable == "same" and fill.locked or rollable == "tint" and c[2] or nil
   return {rgb = {[2] = c[1], [1] = c[2]}, width = M.WIDTHS[width], wall = M.WALLS[walls], grid = grid,
-    fill = fill, fillAlpha = M.FILL_ALPHA[strength], haze = shape == "haze" and M.HAZE or 0,
+    -- Bright tints read far heavier than dark ones (beta: amber at medium looked like a solid wall),
+    -- so a rollable chunk in its own colour gets half the strength; you still want to see into it.
+    fill = fill, fillAlpha = M.FILL_ALPHA[strength], tintAlpha = M.FILL_ALPHA[strength] // 2, haze = shape == "haze" and M.HAZE or 0,
     key = table.concat({colours, width, walls, tostring(grid), locked, rollable, strength, shape}, "/")}
 end
 local ALPHA = {line = 0xE6, grid = 0x80, wallBase = 0x70, wallTop = 0x00}
@@ -136,7 +138,8 @@ function M.geometry(rows, height, style)
   local function fill(id, rgb)
     local step, n = M.FILL_STEP, M.TILES // M.FILL_STEP
     local tx, tz = (id // 256) * M.TILES, (id % 256) * M.TILES
-    local p0, t0, colour, index = #out.positions, #out.tris, rgba(rgb, style.fillAlpha), {}
+    local tinted = rows[id] == "available" and rgb ~= style.fill.locked
+    local p0, t0, colour, index = #out.positions, #out.tris, rgba(rgb, tinted and style.tintAlpha or style.fillAlpha), {}
     for i = 0, n do
       for j = 0, n do
         local h = ground(tx + i * step, tz + j * step)

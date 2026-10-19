@@ -76,7 +76,7 @@ function M.new(store, callbacks)
         {"shadeColours","Colours","classic",{{"classic","Red and amber"},{"colourblind","Blue and orange"},{"subtle","Subtle"}}},
         {"shadeWidth","Line width","normal",{{"thin","Thin"},{"normal","Normal"},{"thick","Thick"}}},
         {"shadeWalls","Glow walls","low",{{"off","Off"},{"low","Low"},{"tall","Tall"}}},
-        {"shadeFillLocked","Fill locked chunks","grey",{{"grey","Grey"},{"dark","Dark"},{"tint","Border colour"},{"off","Off"}}},
+        {"shadeFillLocked","Fill locked chunks","dark",{{"dark","Dark"},{"grey","Grey"},{"tint","Border colour"},{"off","Off"}}},
         {"shadeFillRollable","Fill rollable chunks","tint",{{"tint","Border colour"},{"same","Same as locked"},{"off","Off"}}},
         {"shadeFillStyle","Fill style","haze",{{"haze","Haze box"},{"ground","Ground only"}}},
         {"shadeFillStrength","Fill strength","medium",{{"light","Light"},{"medium","Medium"},{"strong","Strong"},{"solid","Solid"}}},

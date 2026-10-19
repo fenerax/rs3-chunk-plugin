@@ -61,14 +61,14 @@ end)
 eq(style.width,3); eq(style.wall,0); eq(style.grid,false); eq(style.rgb[2],0x2F80FF)
 g=shading.geometry(block,flat,style); validate(g); eq(#g.tris,0); eq(g.walls,0); eq(g.edges,4) -- only the boundary edges
 for i in ipairs(g.positions) do eq(g.rgba[i]>>8,0x2F80FF) end
-eq(shading.style().key,'classic/normal/low/true/grey/tint/medium/haze'); eq(shading.style().wall,shading.WALL)
+eq(shading.style().key,'classic/normal/low/true/dark/tint/medium/haze'); eq(shading.style().wall,shading.WALL)
 -- Fills: locked chunks grey, rollable ones in their border colour, unlocked and unknown never.
 local fills={[NARDAH]='unlocked',[NARDAH+1]='locked',[NARDAH+2]='available',[NARDAH+3]='unknown'}
-local ground=shading.style(function(key,_,default) return key=='shadeFillStyle' and 'ground' or default end)
+local ground=shading.style(function(key,_,default) return ({shadeFillStyle='ground',shadeFillLocked='grey'})[key] or default end)
 g=shading.geometry(fills,flat,ground); validate(g); eq(g.fills,2)
 local seen={}
 for i in ipairs(g.positions) do if g.positions[i][2]==1000+shading.FILL_LIFT then seen[g.rgba[i]]=(seen[g.rgba[i]] or 0)+1 end end
-eq(seen[0x8A8A8A70],17*17); eq(seen[0xFFB02070],17*17)
+eq(seen[0x8A8A8A70],17*17); eq(seen[0xFFB02038],17*17) -- the bright rollable tint at half strength
 parts=shading.split(g); for _,part in ipairs(parts) do validate(part); assert(#part.positions<=17*17) end
 -- Haze: a lid at HAZE above the ground, and curtains only toward differently filled neighbours.
 g=shading.geometry(fills,flat); validate(g); eq(g.fills,2)
