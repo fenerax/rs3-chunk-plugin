@@ -77,6 +77,7 @@ local function diagnosticLines()
     "World channel: id=1; beta="..tostring(store:get("beta","Bool",true)),
     "Panel: "..(panel.error or "ready").."; storage="..tostring(store.writeOK),
     "Payload: "..(net.payloadWarning or "within 16 KB"),
+    "Settings page: "..(#settings.failures==0 and "built" or table.concat(settings.failures,"; ")),
   }
   for _,key in ipairs(require("store").keys) do lines[#lines+1]="DB "..key..": "..store:present(key) end
   for i=1,5 do

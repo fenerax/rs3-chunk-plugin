@@ -1,43 +1,65 @@
 local M = {}
 function M.new(store, callbacks)
-  local self={}
+  local self={failures={}}
   function self:destroy() if self.view then pcall(function() self.view:Destroy() end) end; self.view=nil; self.result=nil end
   function self:message(value) if self.result then pcall(function() self.result.content=value end) end end
+  -- Build each section on its own: on beta one failing control used to blank everything below it.
+  local function section(name,fn)
+    local ok,err=pcall(fn)
+    if not ok then self.failures[#self.failures+1]=name..": "..tostring(err):gsub("[%c]"," "):sub(1,100) end
+  end
   function self:mount(parent)
-    self:destroy()
+    self:destroy(); self.failures={}
     local view=prettyui.SimpleView.new(parent,{width=parent.width,height=parent.height}); self.view=view
-    view:AddTitle("Chunk Picker settings")
-    view:AddText("Sends your location, levels and quest status to the picker you choose, and nothing else.")
-    view:AddText("Server")
-    local entries={}
-    -- Manifest-only extension: no server handles or hostnames are hardcoded in settings.
-    local ok=pcall(function() for name in pairs(Plugin.urls) do entries[#entries+1]={label=tostring(name),id=tostring(name)} end end)
-    table.sort(entries,function(a,b) return a.id<b.id end)
-    if not ok or #entries==0 then view:AddText("Manifest URL enumeration unavailable; see Diagnostics")
-    else view:AddComboBox({entries=entries,selectedID=store:get("server","String","scratch"),onChange=function(_,name)
-      store:set("server","String",name); callbacks.connectionChanged()
-    end}) end
-    view:AddText("Personal key (visible; keep it out of screenshots)")
-    local key=view:AddTextField({text=store:get("personalKey","String",""),placeholder="Paste your personal plugin key",maxLength=256,
-      visibility=ui.TextContentVisibilityMode.VISIBLE})
-    view:AddSimpleButton("Save",function()
-      local text=key:GetText():match("^%s*(.-)%s*$")
-      if text:find("[%c]") then self:message("Key must be one line"); return end
-      store:set("personalKey","String",text); callbacks.connectionChanged(); self:message("Key saved")
+    section("intro",function()
+      view:AddTitle("Chunk Picker settings")
+      view:AddText("Sends your location, levels and quest status to the picker you choose, and nothing else.")
     end)
-    view:AddSimpleButton("Test connection",function() callbacks.test(function(message) self:message(message) end) end,{inline=true})
-    view:AddSimpleButton("Forget key",function()
-      store:forget(); key:SetText("",false); callbacks.connectionChanged(); self:message("Key forgotten")
+    local key
+    section("server",function()
+      local names={}
+      -- Manifest-only extension: no server handles or hostnames are hardcoded in settings.
+      for name in pairs(Plugin.urls) do names[#names+1]=tostring(name) end
+      table.sort(names)
+      if #names==0 then view:AddText("No servers in the manifest; see Diagnostics"); return end
+      local label=view:AddText("Server: "..store:get("server","String","scratch"))
+      -- Plain buttons, not a combo box: the combo box opened empty in the beta settings layer.
+      for i,name in ipairs(names) do
+        view:AddSimpleButton(name,function()
+          store:set("server","String",name); label.content="Server: "..name; callbacks.connectionChanged()
+        end,{inline=i>1})
+      end
     end)
-    self.result=view:AddText({text="Save your key, then test the connection.",height=48,maxLines=2})
-    local choices={}
-    for _,entry in ipairs({{"sendSkills","Send my levels"},{"sendQuests","Send my quests"},{"showPanel","Show panel"},{"beta","Beta world"}}) do
-      choices[#choices+1]={text=entry[2],value=entry[1],selected=store:get(entry[1],"Bool",true)}
-    end
-    view:AddCheckboxButton(choices,{onChange=function(_,_,name,selected)
-      store:set(name,"Bool",selected); callbacks.settingChanged(name)
-    end})
-    view:AddText("Progress waits for review in the picker. Sending it never unlocks a chunk.")
+    section("key",function()
+      view:AddText("Personal key (visible; keep it out of screenshots)")
+      local options={text=store:get("personalKey","String",""),placeholder="Paste your personal plugin key",maxLength=256}
+      local modes=ui and ui.TextContentVisibilityMode
+      if modes and modes.VISIBLE~=nil then options.visibility=modes.VISIBLE end
+      key=view:AddTextField(options)
+    end)
+    section("buttons",function()
+      view:AddSimpleButton("Save",function()
+        if not key then self:message("Key field unavailable; see Diagnostics"); return end
+        local text=key:GetText():match("^%s*(.-)%s*$")
+        if text:find("[%c]") then self:message("Key must be one line"); return end
+        store:set("personalKey","String",text); callbacks.connectionChanged(); self:message("Key saved")
+      end)
+      view:AddSimpleButton("Test connection",function() callbacks.test(function(message) self:message(message) end) end,{inline=true})
+      view:AddSimpleButton("Forget key",function()
+        store:forget(); if key then key:SetText("",false) end; callbacks.connectionChanged(); self:message("Key forgotten")
+      end,{inline=true})
+      self.result=view:AddText({text="Save your key, then test the connection.",height=48,maxLines=2})
+    end)
+    section("options",function()
+      local choices={}
+      for _,entry in ipairs({{"sendSkills","Send my levels"},{"sendQuests","Send my quests"},{"showPanel","Show panel"},{"beta","Beta world"}}) do
+        choices[#choices+1]={text=entry[2],value=entry[1],selected=store:get(entry[1],"Bool",true)}
+      end
+      view:AddCheckboxButton(choices,{onChange=function(_,_,name,selected)
+        store:set(name,"Bool",selected); callbacks.settingChanged(name)
+      end})
+      view:AddText("Progress waits for review in the picker. Sending it never unlocks a chunk.")
+    end)
   end
   return self
 end

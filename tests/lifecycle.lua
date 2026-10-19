@@ -78,7 +78,8 @@ for _,c in ipairs(settings.children) do
   elseif c.content=='Forget key' then forget=c elseif c.GetText and c.content=='' then key=c end
 end
 assert(save and test and forget and key)
-key.content='synthetic'; save.action(); assert(values.personalKey=='synthetic')
+for _,c in ipairs(settings.children) do if c.content=='home' then c.action() end end; assert(values.server=='home')
+for _,c in ipairs(settings.children) do if c.content=='scratch' then c.action() end end; assert(values.server=='scratch')key.content='synthetic'; save.action(); assert(values.personalKey=='synthetic')
 allowed=true; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
 test.action(); assert(#requests==1 and requests[1].path=='/api/plugin/v1/status')
 requests[1].callback({responseCode=200,data='{"state":"unknown"}'})
