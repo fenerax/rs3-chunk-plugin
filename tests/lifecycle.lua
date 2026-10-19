@@ -49,6 +49,7 @@ id={Component={TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP=1},Quest={}}
 prettyui={Window={new=function(p,o) return host(p,o,true) end},SimpleView={new=function(p,o) return host(p,o,false) end},
   SimpleButton={new=function(p,text,action,o) local b=component(p,o); b.action=action; return b end}}
 PluginPermissions={httpAccess=1}
+local chat={}; Chat={AddMessage=function(m) chat[#chat+1]=m end}
 Plugin={urls={home={},scratch={}},HasPermission=function(p) assert(p==1); return allowed end}
 log=function(line) logs[#logs+1]=line end
 GameState={GAME=30}
@@ -129,6 +130,8 @@ assert(not rollBanner(),'the roll banner waits for the locked one')
 emit('Draw',{timeDeltaSecs=2}); emit('ServerLogic'); assert(banners()==1 and not banner.destroyed)
 emit('Draw',{timeDeltaSecs=4}); emit('ServerLogic'); assert(banner.destroyed and banners()==1) -- no repeat while still inside
 local roll=rollBanner(); assert(roll and not roll.destroyed and roll.children[1].content:find('Draynor or chunk 12594'))
+-- Both went to the chatbox straight away, once each.
+assert(#chat==2 and chat[1]:find('Nardah') and chat[2]:find('Draynor or chunk 12594'),table.concat(chat,' | '))
 emit('Draw',{timeDeltaSecs=6}); emit('ServerLogic'); assert(roll.destroyed and rollBanner()==roll) -- once per waiting roll
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',false); assert(values.shadeChunks==false and not shape.visible)
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',true); assert(shape.visible)
@@ -151,6 +154,13 @@ for _,c in ipairs(settings.children) do if c.placeholder and c.placeholder:find(
 field.content='nope'; click('Use code'); assert(values.shadeRgbRollable=='#112233')
 field.content='#abcdef'; click('Use code'); assert(values.shadeRgbRollable=='#ABCDEF')
 click('Red and amber'); assert(values.shadeColours=='classic')
+-- A partner's look code applies; nonsense is refused with a message.
+local codeField
+for _,c in ipairs(settings.children) do if c.placeholder and c.placeholder:find('Look code') then codeField=c end end
+assert(codeField.content:find('^CP1%.cklx'),codeField.content) -- thick width from earlier
+codeField.content='nope'; click('Use look code'); assert(values.shadeColours=='classic')
+codeField.content='CP1.bnldtmho1.-.-.-.-.-'; click('Use look code'); assert(values.shadeColours=='colourblind' and values.shadeWidth=='normal')
+assert(codeField.content=='CP1.bnldtmho1.-.-.-.-.-')
 -- Begin another request before revoking permission, so cancellation is observable.
 test.action(); req=requests[#requests]
 allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=false}); assert(req.cancelled)

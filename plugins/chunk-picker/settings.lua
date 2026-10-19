@@ -1,4 +1,5 @@
 local shading = require("shading")
+local lookcode = require("lookcode")
 local M = {}
 -- Swatches offered for every colour; the picker and the hex field cover anything else.
 M.PALETTE = {{"Red",0xFF3B30},{"Orange",0xFF9F1C},{"Amber",0xFFB020},{"Yellow",0xFFE14D},
@@ -39,9 +40,12 @@ function M.new(store, callbacks, options)
   function self:destroy()
     if self.window then saveGeometry() end
     if self.view then pcall(function() self.view:Destroy() end) end
-    self.view=nil; self.window=nil; self.pending=nil; self.result=nil; self.labels={}; self.previews={}; self.picker=nil
+    self.view=nil; self.window=nil; self.pending=nil; self.result=nil; self.labels={}; self.previews={}; self.picker=nil; self.codeField=nil; self.colourResult=nil
   end
-  function self:message(value) if self.result then pcall(function() self.result.content=value end) end end
+  -- The Connection and Colours tabs each have a result line; both show the latest message.
+  function self:message(value)
+    for _,line in ipairs({self.result,self.colourResult}) do pcall(function() line.content=value end) end
+  end
   -- Build each section on its own: on beta one failing control used to blank everything below it.
   local function section(name,fn)
     local ok,err=pcall(fn)
@@ -58,6 +62,7 @@ function M.new(store, callbacks, options)
     for key,entry in pairs(self.labels) do
       pcall(function() entry.text.content=entry.title..": "..entry.name(store:get(key,"String",entry.default)) end)
     end
+    if self.codeField then pcall(function() self.codeField:SetText(lookcode.encode(get),false) end) end
     for target,entry in pairs(self.previews) do
       pcall(function()
         local rgb=current(target)
@@ -152,7 +157,7 @@ function M.new(store, callbacks, options)
   end
   local function look(page)
     section("borders",function()
-      checkboxes(page,{{"shadeChunks","Show chunk borders and fills"},{"shadeGrid","Lines between locked chunks"},{"warnLocked","Warn when I walk into a locked chunk"},{"warnRoll","Tell me when a roll is waiting"},{"showPartner","Show my partner on the panel"}},true)
+      checkboxes(page,{{"shadeChunks","Show chunk borders and fills"},{"shadeGrid","Lines between locked chunks"},{"warnLocked","Warn when I walk into a locked chunk"},{"warnRoll","Tell me when a roll is waiting"},{"warnChat","Also put these in my chatbox"},{"showPartner","Show my partner on the panel"}},true)
       choiceRow(page,"shadeWidth","Line width","normal",{{"thin","Thin"},{"normal","Normal"},{"thick","Thick"}})
       choiceRow(page,"shadeWalls","Glow walls","low",{{"off","Off"},{"low","Low"},{"tall","Tall"}})
     end)
@@ -201,6 +206,18 @@ function M.new(store, callbacks, options)
         if rgb then setColour(target,rgb); pcall(function() field:SetText("",false) end)
         else self:message("Colour codes look like #FF3B30") end
       end)
+    end)
+    section("share",function()
+      page:AddText("Share your look: copy this code, or paste a partner's code and use it.")
+      self.codeField=page:AddTextField({text=lookcode.encode(get),placeholder="Look code, starts CP1",maxLength=80})
+      page:AddSimpleButton("Use look code",function()
+        local entries=lookcode.decode(self.codeField:GetText())
+        if not entries then self:message("That isn't a whole look code (it starts CP1.)"); return end
+        for _,e in ipairs(entries) do store:set(e[1],e[2],e[3]) end
+        if self.picker then pcall(function() self.picker:SetValue((current(target) or 0x808080)*256+0xFF,false) end) end
+        changed("shadeColours"); self:message("Look code used")
+      end)
+      self.colourResult=page:AddText({text="",height=24,maxLines=1})
     end)
   end
   -- Tabs fill the given height; each page scrolls when its controls don't fit.

@@ -62,6 +62,18 @@ eq(style.width,3); eq(style.wall,0); eq(style.grid,false); eq(style.rgb[2],0x2F8
 g=shading.geometry(block,flat,style); validate(g); eq(#g.tris,0); eq(g.walls,0); eq(g.edges,4) -- only the boundary edges
 for i in ipairs(g.positions) do eq(g.rgba[i]>>8,0x2F80FF) end
 eq(shading.style().key,'classic/normal/low/true/dark/tint/medium/haze////outline/3065014')
+-- Look codes: defaults, a custom look round-trips, and broken codes change nothing.
+local lookcode=require('lookcode')
+eq(lookcode.encode(function(_,_,default) return default end),'CP1.cnldtmho1.-.-.-.-.-')
+local saved={shadeColours='custom',shadeRgbLocked='#112233',shadeRgbRollable='#445566',shadeWidth='thick',shadeGrid=false,
+  shadeFillLocked='grey',shadePartner='tint',shadeRgbPartner='#abcdef'}
+local code=lookcode.encode(function(key,_,default) local v=saved[key]; if v==nil then return default end; return v end)
+eq(code,'CP1.xklgtmht0.112233.445566.-.-.ABCDEF')
+local applied={}; for _,e in ipairs(lookcode.decode(' '..code..' ')) do applied[e[1]]=e[3] end
+eq(applied.shadeColours,'custom'); eq(applied.shadeWidth,'thick'); eq(applied.shadeGrid,false); eq(applied.shadeRgbPartner,'#ABCDEF')
+eq(applied.shadeRgbFillLocked,'')
+for _,bad in ipairs({'','CP1','CP2.cnldtmho1.-.-.-.-.-','CP1.cnldtmho.-.-.-.-.-','CP1.znldtmho1.-.-.-.-.-','CP1.cnldtmho1.12345G.-.-.-.-',
+  'CP1.cnldtmho2.-.-.-.-.-'}) do eq(lookcode.decode(bad),nil) end
 -- Shared access: a chunk only the partner unlocked arrives as its own state.
 local duo=net.nearby(json.decode('[{"chunkId":"13613","state":"unlocked","by":"me"},{"chunkId":"13614","state":"unlocked","by":"partner"},'..
   '{"chunkId":"13612","state":"unlocked","by":"both"},{"chunkId":"13615","state":"locked","by":"partner"}]'))

@@ -8,9 +8,17 @@ function M.new(store)
     if self.window then pcall(function() self.window:Destroy() end) end
     self.window=nil; self.shownAt=nil
   end
+  -- Also into your own chatbox (local only, never sent to other players), so a missed banner stays readable.
+  function self:post(message)
+    if store:get("warnChat","Bool",true) then
+      local ok=pcall(function() Chat.AddMessage("Chunk Picker: "..message) end)
+      if ok then self.posted=(self.posted or 0)+1 end
+    end
+  end
   function self:show(chunk,name,now,rollable)
-    self:notice("Locked chunk","You walked into "..(name and (name.." (chunk "..chunk..")") or ("chunk "..chunk))
-      ..(rollable and ", which is locked. It can be picked next." or ", which is locked."),0xFF7878FF,now)
+    local message="You walked into "..(name and (name.." (chunk "..chunk..")") or ("chunk "..chunk))
+      ..(rollable and ", which is locked. It can be picked next." or ", which is locked.")
+    self:post(message); self:notice("Locked chunk",message,0xFF7878FF,now)
   end
   -- One banner at a time; a second waits its turn instead of replacing the first.
   function self:notice(title,message,colour,now)
@@ -66,12 +74,13 @@ function M.new(store)
     if key==self.rollKey then return end
     self.rollKey=key
     if store:get("warnRoll","Bool",true) then
-      self:notice("Roll waiting","Choose "..table.concat(names," or ").." in the picker.",0xE5C66BFF,now)
+      local message="Roll waiting: choose "..table.concat(names," or ").." in the picker."
+      self:post(message); self:notice("Roll waiting",message,0xE5C66BFF,now)
     end
   end
   function self:reset() self.warned=nil; self.rollKey=nil; self.queue={}; self:destroy() end
   function self:describe()
-    return (self.error or "ready").."; shown="..self.count..(self.window and "; on screen" or "")
+    return (self.error or "ready").."; shown="..self.count.."; chat="..(self.posted or 0)..(self.window and "; on screen" or "")
   end
   return self
 end

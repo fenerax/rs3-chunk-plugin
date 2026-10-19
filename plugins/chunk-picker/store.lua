@@ -1,6 +1,6 @@
 -- Typed, immediate writes: no proxy objects and no key values in diagnostics.
 local M = {}
-M.keys = {"server", "personalKey", "sendSkills", "sendQuests", "showPanel", "showPartner", "warnLocked", "warnRoll", "shadeChunks", "shadeColours", "shadeWidth", "shadeWalls", "shadeGrid", "shadeFillLocked", "shadeFillRollable", "shadeFillStrength", "shadeFillStyle", "shadePartner", "shadeRgbPartner", "shadeRgbLocked", "shadeRgbRollable", "shadeRgbFillLocked", "shadeRgbFillRollable", "beta", "collapsed", "panelX", "panelY", "settingsWindow", "settingsX", "settingsY", "settingsW", "settingsH", "sequence"}
+M.keys = {"server", "personalKey", "sendSkills", "sendQuests", "showPanel", "showPartner", "warnLocked", "warnRoll", "warnChat", "shadeChunks", "shadeColours", "shadeWidth", "shadeWalls", "shadeGrid", "shadeFillLocked", "shadeFillRollable", "shadeFillStrength", "shadeFillStyle", "shadePartner", "shadeRgbPartner", "shadeRgbLocked", "shadeRgbRollable", "shadeRgbFillLocked", "shadeRgbFillRollable", "beta", "collapsed", "panelX", "panelY", "settingsWindow", "settingsX", "settingsY", "settingsW", "settingsH", "sequence"}
 function M.new(db)
   local self = {db = db, writeOK = true}
   function self:get(key, kind, default)
