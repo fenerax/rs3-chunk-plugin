@@ -132,6 +132,10 @@ emit('Draw',{timeDeltaSecs=4}); emit('ServerLogic'); assert(banner.destroyed and
 local roll=rollBanner(); assert(roll and not roll.destroyed and roll.children[1].content:find('Draynor or chunk 12594'))
 -- Both went to the chatbox straight away, once each.
 assert(#chat==2 and chat[1]:find('Nardah') and chat[2]:find('Draynor or chunk 12594'),table.concat(chat,' | '))
+-- Granting chat posts a confirmation line; the diagnostics show the live permission and the change.
+emit('OptionalPermissionChanged',{permissionName='chatAccess',enabled=true})
+assert(#chat==3 and chat[3]=='Chunk Picker: chat messages are on.')
+emit('OptionalPermissionChanged',{permissionName='chatAccess',enabled=false}); assert(#chat==3)
 emit('Draw',{timeDeltaSecs=6}); emit('ServerLogic'); assert(roll.destroyed and rollBanner()==roll) -- once per waiting roll
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',false); assert(values.shadeChunks==false and not shape.visible)
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',true); assert(shape.visible)

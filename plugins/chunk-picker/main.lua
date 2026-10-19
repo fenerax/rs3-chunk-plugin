@@ -29,10 +29,11 @@ local function subscribe(name,fn)
   end)
   if not ok then log("Chunk Picker: event unavailable: "..name) end
 end
-local function permission()
-  local ok,allowed=pcall(function() return Plugin.HasPermission(PluginPermissions.httpAccess) end)
+local function permission(name)
+  local ok,allowed=pcall(function() return Plugin.HasPermission(PluginPermissions[name or "httpAccess"]) end)
   return ok and allowed==true
 end
+local permissionEvents={}
 local function connection()
   if not permission() then return nil,nil,"Allow web access in the plugin's permissions to connect" end
   local key=store:get("personalKey","String","")
@@ -87,6 +88,9 @@ local function diagnosticLines()
     "Payload: "..(net.payloadWarning or "within 16 KB"),
     "Shading: "..shading:describe(),
     "Locked warning: "..warning:describe(),
+    "Permissions now: http="..tostring(permission("httpAccess")).." chat="..tostring(permission("chatAccess"))
+      .."; chat enum="..tostring(pcall(function() assert(PluginPermissions.chatAccess~=nil) end))
+      .."; changes="..(#permissionEvents==0 and "none" or table.concat(permissionEvents,",")),
     "Settings page: "..(#settings.failures==0 and "built" or table.concat(settings.failures,"; ")),
     "Settings window: "..(not settingsWindow.window and (settingsWindow.error and "failed" or "closed")
       or (#settingsWindow.failures==0 and "built" or table.concat(settingsWindow.failures,"; "))
@@ -124,7 +128,10 @@ end
 subscribe("SettingsLayerReady",function(e) settings:mount(e.component) end)
 subscribe("ContentLayerReady",function(e) diagnostics:mount(e.component) end)
 subscribe("OptionalPermissionChanged",function(e)
+  if #permissionEvents<8 then permissionEvents[#permissionEvents+1]=tostring(e.permissionName).."="..tostring(e.enabled) end
   if e.permissionName=="httpAccess" then changed(); render() end
+  -- Granting chat posts one line straight away, so it's clear it worked.
+  if e.permissionName=="chatAccess" and e.enabled then warning:post("chat messages are on.") end
 end)
 subscribe("GameStateChanged",function(e)
   local state=e.newState
