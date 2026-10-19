@@ -78,7 +78,8 @@ function M.new(store, callbacks)
         {"shadeWalls","Glow walls","low",{{"off","Off"},{"low","Low"},{"tall","Tall"}}},
         {"shadeFillLocked","Fill locked chunks","grey",{{"grey","Grey"},{"dark","Dark"},{"tint","Border colour"},{"off","Off"}}},
         {"shadeFillRollable","Fill rollable chunks","tint",{{"tint","Border colour"},{"same","Same as locked"},{"off","Off"}}},
-        {"shadeFillStrength","Fill strength","medium",{{"light","Light"},{"medium","Medium"},{"strong","Strong"}}},
+        {"shadeFillStyle","Fill style","haze",{{"haze","Haze box"},{"ground","Ground only"}}},
+        {"shadeFillStrength","Fill strength","medium",{{"light","Light"},{"medium","Medium"},{"strong","Strong"},{"solid","Solid"}}},
       }) do
         local key,title,default,choices=row[1],row[2],row[3],row[4]
         local function name(value) for _,c in ipairs(choices) do if c[1]==value then return c[2] end end; return choices[1][2] end

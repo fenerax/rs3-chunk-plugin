@@ -61,14 +61,28 @@ end)
 eq(style.width,3); eq(style.wall,0); eq(style.grid,false); eq(style.rgb[2],0x2F80FF)
 g=shading.geometry(block,flat,style); validate(g); eq(#g.tris,0); eq(g.walls,0); eq(g.edges,4) -- only the boundary edges
 for i in ipairs(g.positions) do eq(g.rgba[i]>>8,0x2F80FF) end
-eq(shading.style().key,'classic/normal/low/true/grey/tint/medium'); eq(shading.style().wall,shading.WALL)
+eq(shading.style().key,'classic/normal/low/true/grey/tint/medium/haze'); eq(shading.style().wall,shading.WALL)
 -- Fills: locked chunks grey, rollable ones in their border colour, unlocked and unknown never.
 local fills={[NARDAH]='unlocked',[NARDAH+1]='locked',[NARDAH+2]='available',[NARDAH+3]='unknown'}
-g=shading.geometry(fills,flat); validate(g); eq(g.fills,2)
+local ground=shading.style(function(key,_,default) return key=='shadeFillStyle' and 'ground' or default end)
+g=shading.geometry(fills,flat,ground); validate(g); eq(g.fills,2)
 local seen={}
 for i in ipairs(g.positions) do if g.positions[i][2]==1000+shading.FILL_LIFT then seen[g.rgba[i]]=(seen[g.rgba[i]] or 0)+1 end end
 eq(seen[0x8A8A8A70],17*17); eq(seen[0xFFB02070],17*17)
 parts=shading.split(g); for _,part in ipairs(parts) do validate(part); assert(#part.positions<=17*17) end
+-- Haze: a lid at HAZE above the ground, and curtains only toward differently filled neighbours.
+g=shading.geometry(fills,flat); validate(g); eq(g.fills,2)
+local lid,curtainBase=0,0
+for i,p in ipairs(g.positions) do
+  if p[2]==1000+shading.HAZE then lid=lid+1 elseif p[2]==1000+shading.FILL_LIFT then curtainBase=curtainBase+1 end
+end
+-- Locked: curtains to unlocked (south) and rollable (north). Rollable: to locked (south) and unknown (north).
+eq(curtainBase,4*17); eq(lid,2*17*17+4*17)
+parts=shading.split(g); for _,part in ipairs(parts) do validate(part); assert(#part.positions<=17*17+4*2*17) end
+-- Neighbouring chunks with the same fill share one haze: no curtain between them.
+g=shading.geometry({[NARDAH]='locked',[NARDAH+1]='locked'},flat); validate(g); curtainBase=0
+for _,p in ipairs(g.positions) do if p[2]==1000+shading.FILL_LIFT then curtainBase=curtainBase+1 end end
+eq(curtainBase,0)
 -- Rollable "same as locked" follows the locked choice; strong and dark apply.
 local same=shading.style(function(key,_,default) return ({shadeFillRollable='same',shadeFillLocked='dark',shadeFillStrength='strong'})[key] or default end)
 eq(same.fill.locked,0); eq(same.fill.available,0); eq(same.fillAlpha,0xA8)

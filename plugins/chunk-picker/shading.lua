@@ -16,7 +16,10 @@ M.WIDTHS = {thin = 2, normal = 3, thick = 6}
 M.WALLS = {off = 0, low = 320, tall = 768}
 -- Whole-chunk fills, like the OSRS picker greying out chunks you can't use.
 M.FILLS = {grey = 0x8A8A8A, dark = 0x000000}
-M.FILL_ALPHA = {light = 0x40, medium = 0x70, strong = 0xA8}
+M.FILL_ALPHA = {light = 0x40, medium = 0x70, strong = 0xA8, solid = 0xE8}
+-- Haze: a translucent box (raised lid plus curtains) so trees and buildings inside look greyed too.
+-- The client has no API to recolour the scene itself, which is how RuneLite's Region Locker greys chunks.
+M.HAZE = 3072                -- lid height in fine units (6 tiles)
 M.FILL_STEP = 4              -- tiles between fill samples: 17x17 points per chunk
 M.FILL_LIFT = 20             -- below the border lines so they stay on top
 function M.style(get)
@@ -28,12 +31,13 @@ function M.style(get)
   local locked = get("shadeFillLocked", "String", "grey"); if not (M.FILLS[locked] or locked == "tint" or locked == "off") then locked = "grey" end
   local rollable = get("shadeFillRollable", "String", "tint"); if not (rollable == "same" or rollable == "tint" or rollable == "off") then rollable = "tint" end
   local strength = get("shadeFillStrength", "String", "medium"); if not M.FILL_ALPHA[strength] then strength = "medium" end
+  local shape = get("shadeFillStyle", "String", "haze"); if shape ~= "ground" then shape = "haze" end
   local c = M.COLOURS[colours]
   local fill = {locked = locked == "tint" and c[1] or M.FILLS[locked]}
   fill.available = rollable == "same" and fill.locked or rollable == "tint" and c[2] or nil
   return {rgb = {[2] = c[1], [1] = c[2]}, width = M.WIDTHS[width], wall = M.WALLS[walls], grid = grid,
-    fill = fill, fillAlpha = M.FILL_ALPHA[strength],
-    key = table.concat({colours, width, walls, tostring(grid), locked, rollable, strength}, "/")}
+    fill = fill, fillAlpha = M.FILL_ALPHA[strength], haze = shape == "haze" and M.HAZE or 0,
+    key = table.concat({colours, width, walls, tostring(grid), locked, rollable, strength, shape}, "/")}
 end
 local ALPHA = {line = 0xE6, grid = 0x80, wallBase = 0x70, wallTop = 0x00}
 local function rgba(rgb, alpha) return rgb * 256 + alpha end
@@ -136,7 +140,7 @@ function M.geometry(rows, height, style)
     for i = 0, n do
       for j = 0, n do
         local h = ground(tx + i * step, tz + j * step)
-        if h then index[i * (n + 1) + j] = vertex(tx + i * step, tz + j * step, h + M.FILL_LIFT, colour)
+        if h then index[i * (n + 1) + j] = vertex(tx + i * step, tz + j * step, h + (style.haze > 0 and style.haze or M.FILL_LIFT), colour)
         else out.missing = out.missing + 1 end
       end
     end
@@ -147,6 +151,33 @@ function M.geometry(rows, height, style)
         local c, d = index[(i + 1) * (n + 1) + j + 1], index[i * (n + 1) + j + 1]
         if a and b and c and d then
           for _, v in ipairs({a, b, c, a, c, d, a, c, b, a, d, c}) do t[#t + 1] = v end
+        end
+      end
+    end
+    if style.haze > 0 then
+      -- Curtains close the box only toward chunks with a different (or no) fill, so neighbouring
+      -- locked chunks read as one continuous haze. Chunks beyond the nearby block stay open.
+      local cx, cz = id // 256, id % 256
+      local sides = {{cz > 0 and id - 1, 1, 0, 0, 0}, {cz < 199 and id + 1, 1, 0, 0, n},
+        {cx > 0 and id - 256, 0, 1, 0, 0}, {cx < 199 and id + 256, 0, 1, n, 0}}
+      for _, side in ipairs(sides) do
+        local other = side[1] and rows[side[1]]
+        if other ~= nil and style.fill[other] ~= rgb then
+          local previousBase, previousTop
+          for k = 0, n do
+            local x, z = tx + (side[4] + side[2] * k) * step, tz + (side[5] + side[3] * k) * step
+            local h = ground(x, z)
+            if h then
+              local base, top = vertex(x, z, h + M.FILL_LIFT, colour), vertex(x, z, h + style.haze, colour)
+              if previousBase then
+                for _, v in ipairs({previousBase, base, top, previousBase, top, previousTop,
+                                    previousBase, top, base, previousBase, previousTop, top}) do t[#t + 1] = v end
+              end
+              previousBase, previousTop = base, top
+            else
+              out.missing = out.missing + 1; previousBase = nil
+            end
+          end
         end
       end
     end
