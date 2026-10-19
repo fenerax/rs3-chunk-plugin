@@ -1,0 +1,148 @@
+-- All wire-format policy lives here. Aligned to plugsync/docs/plugin-api.md (2026-10-19).
+local json = require("json")
+local M = {REPORT = "/api/plugin/v1/report", STATUS = "/api/plugin/v1/status", MAX_BODY = 16384}
+local months = {Jan=1,Feb=2,Mar=3,Apr=4,May=5,Jun=6,Jul=7,Aug=8,Sep=9,Oct=10,Nov=11,Dec=12}
+-- Gregorian conversions also work when the client omits os/date/utf8.
+local function days(y,m,d)
+  y=y-(m<=2 and 1 or 0); local era=math.floor(y/400); local yo=y-era*400
+  local mp=m+(m>2 and -3 or 9)
+  return era*146097+yo*365+math.floor(yo/4)-math.floor(yo/100)+math.floor((153*mp+2)/5)+d-1-719468
+end
+function M.iso(epoch)
+  local day=math.floor(epoch/86400); local seconds=math.floor(epoch-day*86400)
+  local z=day+719468; local era=math.floor(z/146097); local doe=z-era*146097
+  local yo=math.floor((doe-math.floor(doe/1460)+math.floor(doe/36524)-math.floor(doe/146096))/365)
+  local y=yo+era*400; local doy=doe-(365*yo+math.floor(yo/4)-math.floor(yo/100))
+  local mp=math.floor((5*doy+2)/153); local d=doy-math.floor((153*mp+2)/5)+1
+  local m=mp+(mp<10 and 3 or -9); y=y+(m<=2 and 1 or 0)
+  return string.format("%04d-%02d-%02dT%02d:%02d:%02dZ",y,m,d,math.floor(seconds/3600),math.floor(seconds/60)%60,seconds%60)
+end
+function M.dateEpoch(header)
+  if type(header) ~= "string" then return nil end
+  local d,m,y,h,mi,s=header:match("(%d%d?) (%a%a%a) (%d%d%d%d) (%d%d):(%d%d):(%d%d) GMT")
+  if not d or not months[m] then return nil end
+  return days(tonumber(y),months[m],tonumber(d))*86400+tonumber(h)*3600+tonumber(mi)*60+tonumber(s)
+end
+local function header(request, name)
+  local h=request.header
+  if type(h)=="table" then for k,v in pairs(h) do if tostring(k):lower()==name:lower() then return tostring(v) end end end
+  if type(h)=="string" then
+    for line in h:gmatch("[^\r\n]+") do local k,v=line:match("^([^:]+):%s*(.*)$"); if k and k:lower()==name:lower() then return v end end
+  end
+end
+function M.build(seq,epoch,world,position,skills,quests)
+  local p={v=1,seq=seq,sentAt=M.iso(epoch),position={x=position.x,z=position.z,floor=position.floor}}
+  if world then p.world=world end
+  p.skills=skills; p.quests=quests
+  local warning
+  if quests and (#quests.finished>500 or #quests.started>500) then
+    p.quests=nil; warning="Quest snapshot exceeds 500 names; held locally"
+  end
+  local body=json.encode(p)
+  -- Quest objects replace prior lists; splitting them would silently lose progress.
+  -- Send the complete snapshot or hold it with a visible diagnostic.
+  if #body>M.MAX_BODY and p.quests then
+    p.skills=nil; body=json.encode(p)
+    if #body>M.MAX_BODY then p.quests=nil; p.skills=skills; warning="Quest snapshot exceeds 16 KB; held locally" end
+    body=json.encode(p)
+  end
+  assert(#body<=M.MAX_BODY,"Report exceeds 16 KB")
+  return body,p,warning
+end
+function M.new(options)
+  local self={history={}, busy=false, failures=0, nextAt=0, blocked=false, localhostConnected=false,
+    message="Not connected", sequence=options.sequence or 0, clockEpoch=nil, generation=0}
+  function self:epoch(now)
+    if os and type(os.time)=="function" then local ok,v=pcall(os.time); if ok and type(v)=="number" then return v end end
+    return self.clockEpoch and (self.clockEpoch+now-self.clockAt) or nil
+  end
+  function self:cancel()
+    self.generation=self.generation+1
+    local request=self.request; self.request=nil; self.busy=false
+    if request then pcall(function() request:Cancel() end) end
+  end
+  function self:reset()
+    self:cancel(); self.blocked=false; self.nextAt=0; self.failures=0; self.status=nil; self.lastSync=nil
+    self.message="Not connected"
+    self.heldQuestJSON=nil; self.payloadWarning=nil
+  end
+  function self:filterQuests(quests)
+    if quests and self.heldQuestJSON==json.encode(quests) then return nil end
+    return quests
+  end
+  function self:ready(now) return not self.busy and not self.blocked and now>=self.nextAt end
+  function self:requestHTTP(now,handle,key,method,body,done)
+    if not self:ready(now) then return false end
+    self.busy=true; self.startedAt=now; local generation=self.generation
+    local function complete(r)
+      if generation~=self.generation or not self.busy then return end
+      self.busy=false; self.request=nil
+      local current=options.now and options.now() or now
+      local code=tonumber(r.responseCode) or 0
+      local info=tostring(r.errorInfo or "")
+      -- Never log response bodies, URLs, headers, or credentials. Redact key even if echoed by transport.
+      if key~="" then info=info:gsub(key:gsub("([^%w])","%%%1"),"[redacted]") end
+      info=info:gsub("gpk_[%w_-]+","[redacted]"):gsub("https?://[^%s]+","[URL]"):gsub("[%c]"," "):sub(1,160)
+      table.insert(self.history,1,{code=code,timedOut=r.timedOut==true,failed=r.failed==true,errorInfo=info})
+      if #self.history>5 then table.remove(self.history) end
+      if code>0 then self.localhostConnected=true end
+      local date=M.dateEpoch(header(r,"Date")); if date then self.clockEpoch=date; self.clockAt=current end
+      local ok,status=pcall(json.decode,r.data or "")
+      local success=code>=200 and code<300 and not r.failed and not r.timedOut and ok and type(status)=="table"
+        and ({unlocked=true,locked=true,available=true,unknown=true})[status.state]==true
+      if success then
+        self.failures=0; self.nextAt=current+1; self.status=status; self.lastSync=current; self.message="Connected"
+      elseif code==401 then self.blocked=true; self.status=nil; self.message="Key not accepted"
+      else
+        self.failures=self.failures+1
+        local delay=math.min(300,2^math.min(self.failures,9))
+        if code==429 then delay=math.max(delay,tonumber(header(r,"Retry-After")) or 60) end
+        self.nextAt=current+delay; self.status=nil
+        self.message=code==429 and "Picker asked to slow down, retrying" or "Picker unreachable, retrying"
+        if code==409 and date then self.sequence=math.max(self.sequence,math.floor(date*1000)) end
+      end
+      if done then done(success,status,code) end
+    end
+    local ok=pcall(function()
+      local r=HTTPRequest.new(handle,method=="GET" and M.STATUS or M.REPORT); self.request=r
+      r:AddHeader("Authorization","Bearer "..key); r:AddHeader("Content-Type","application/json")
+      if method=="GET" then r:Get(complete) else r:Post(body,complete) end
+    end)
+    if not ok then complete({responseCode=0,failed=true,errorInfo="HTTPRequest setup failed"}) end
+    return true
+  end
+  function self:test(now,handle,key,done) return self:requestHTTP(now,handle,key,"GET",nil,done) end
+  function self:report(now,handle,key,world,position,skills,quests,done)
+    local epoch=self:epoch(now)
+    if not epoch then
+      self.message="Checking picker clock"
+      return self:test(now,handle,key,function(ok)
+        if ok and not self:epoch(options.now and options.now() or now) then
+          self.message="Picker clock unavailable (HTTP Date missing)"; self.nextAt=now+60
+        end
+      end)
+    end
+    if not self:ready(now) then return false end
+    self.sequence=math.max(self.sequence+1,math.floor(epoch*1000))
+    if options.saveSequence then options.saveSequence(self.sequence) end
+    local body,payload,warning=M.build(self.sequence,epoch,world,position,skills,quests)
+    if quests then
+      self.payloadWarning=warning
+      self.heldQuestJSON=not payload.quests and json.encode(quests) or nil
+    end
+    return self:requestHTTP(now,handle,key,"POST",body,function(ok,status,code)
+      if done then done(ok,payload,status,code) end
+    end)
+  end
+  function self:tick(now)
+    -- Guard against a transport that never calls its callback; cancellation fences late callbacks.
+    if self.busy and now-self.startedAt>30 then
+      self:cancel(); self.failures=self.failures+1; self.nextAt=now+math.min(300,2^math.min(self.failures,9))
+      self.status=nil; self.message="Picker unreachable, retrying"
+      table.insert(self.history,1,{code=0,timedOut=true,failed=false,errorInfo="Local 30 s timeout"})
+      if #self.history>5 then table.remove(self.history) end
+    end
+  end
+  return self
+end
+return M

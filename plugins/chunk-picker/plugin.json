@@ -1,0 +1,12 @@
+{
+  "name": "Chunk Picker",
+  "version": "0.1.0",
+  "requiredDependencies": { "prettyui": 6398181 },
+  "optionalPermissions": ["httpAccess"],
+  "urls": {
+    "scratch": "http://127.0.0.1:8950",
+    "home": "http://127.0.0.1:8789"
+  },
+  "hasSettingsIcon": true,
+  "hasRibbonIcon": true
+}
