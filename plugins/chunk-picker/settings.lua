@@ -149,7 +149,7 @@ function M.new(store, callbacks, options)
   end
   local function look(page)
     section("borders",function()
-      checkboxes(page,{{"shadeChunks","Show chunk borders and fills"},{"shadeGrid","Lines between locked chunks"}},true)
+      checkboxes(page,{{"shadeChunks","Show chunk borders and fills"},{"shadeGrid","Lines between locked chunks"},{"warnLocked","Warn when I walk into a locked chunk"}},true)
       choiceRow(page,"shadeWidth","Line width","normal",{{"thin","Thin"},{"normal","Normal"},{"thick","Thick"}})
       choiceRow(page,"shadeWalls","Glow walls","low",{{"off","Off"},{"low","Low"},{"tall","Tall"}})
     end)

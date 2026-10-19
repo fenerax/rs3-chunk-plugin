@@ -114,6 +114,13 @@ local shape=shapes['chunk-picker-shading-1']; assert(shape and shape.visible and
 local wall=false
 for name,s in pairs(shapes) do if name:find('^chunk%-picker%-shading%-%d+$') and s.visible and s.data.tris then wall=true end end
 assert(wall) -- Nardah locked beside an unlocked chunk: a wall on their shared edge
+-- Walking into a locked chunk shows a banner once, which clears itself.
+local function banners() local n,last=0,nil
+  for _,b in ipairs(windows) do if b.title=='Locked chunk' then n=n+1; last=b end end; return n,last
+end
+local n,banner=banners(); assert(n==1 and not banner.destroyed and banner.children[1].content:find('Nardah'))
+emit('Draw',{timeDeltaSecs=2}); emit('ServerLogic'); assert(banners()==1 and not banner.destroyed)
+emit('Draw',{timeDeltaSecs=4}); emit('ServerLogic'); assert(banner.destroyed and banners()==1) -- no repeat while still inside
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',false); assert(values.shadeChunks==false and not shape.visible)
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',true); assert(shape.visible)
 for _,c in ipairs(settings.children) do if c.content=='Thick' then c.action() end end
@@ -141,9 +148,12 @@ allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',ena
 req.callback({responseCode=200,data='{"state":"unlocked","chunkId":"13613"}'})
 forget.action(); assert(values.personalKey==nil)
 emit('ContentLayerReady',{component=root}); assert(views[#views].children[1].content=='Diagnostics')
-local old=windows[#windows]; root=component(nil,{width=800,height=600}); emit('WindowSizeChanged'); assert(old.destroyed)
-emit('GameStateChanged',{newState=37}); assert(windows[#windows].destroyed)
-emit('GameStateChanged',{newState=30}); assert(not windows[#windows].destroyed)
+local function panelWindow()
+  for i=#windows,1,-1 do local t=windows[i].title or ''; if t=='Chunk Picker' or t:find(' · ') then return windows[i] end end
+end
+local old=panelWindow(); root=component(nil,{width=800,height=600}); emit('WindowSizeChanged'); assert(old.destroyed)
+emit('GameStateChanged',{newState=37}); assert(panelWindow().destroyed)
+emit('GameStateChanged',{newState=30}); assert(not panelWindow().destroyed)
 -- The hub page can't be resized, so it opens the same tabs in a movable, resizable window.
 local function settingsWindow()
   for i=#windows,1,-1 do if windows[i].title=='Chunk Picker settings' then return windows[i] end end
@@ -168,7 +178,7 @@ for _,c in ipairs(settingsWindow().children) do if c.content=='Large' then c.act
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 assert(values.settingsW==640 and settingsWindow().options.width==640 and settingsWindow().options.height==600)
 settingsWindow().options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
-PluginShutdown(); assert(next(handlers)==nil); assert(windows[#windows].destroyed); assert(next(shapes)==nil)
+PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()
 for _,line in ipairs(logs) do assert(not line:find('synthetic')) end
 print('lifecycle tests passed')

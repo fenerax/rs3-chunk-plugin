@@ -6,6 +6,7 @@ local sync=require("sync").new()
 local shadingModule=require("shading")
 local shading=shadingModule.new({enabled=function() return store:get("shadeChunks","Bool",true) end,
   style=function() return shadingModule.style(function(...) return store:get(...) end) end})
+local warning=require("warning").new(store)
 local netModule=require("net")
 local now, alive, position, reason, playing=0,true,nil,"Waiting for login",false
 local subscriptions, warned={},{}
@@ -85,6 +86,7 @@ local function diagnosticLines()
     "Panel: "..(panel.error or "ready").."; storage="..tostring(store.writeOK),
     "Payload: "..(net.payloadWarning or "within 16 KB"),
     "Shading: "..shading:describe(),
+    "Locked warning: "..warning:describe(),
     "Settings page: "..(#settings.failures==0 and "built" or table.concat(settings.failures,"; ")),
     "Settings window: "..(not settingsWindow.window and (settingsWindow.error and "failed" or "closed")
       or (#settingsWindow.failures==0 and "built" or table.concat(settingsWindow.failures,"; "))
@@ -130,7 +132,7 @@ subscribe("GameStateChanged",function(e)
   local game=state==30 or (GameState and state==GameState.GAME) or numeric==30
   if game then enterGame()
   else
-    playing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); panel:destroy(); shading:clear("waiting for login")
+    playing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); panel:destroy(); warning:reset(); shading:clear("waiting for login")
   end
 end)
 subscribe("WindowSizeChanged",function() panel:build(); settingsWindow:build() end)
@@ -160,6 +162,8 @@ subscribe("ServerLogic",function()
     end,lines)
   end
   shading:update(position,net.status,now); shading:marker()
+  local status=net.status
+  warning:update(position,position and status and tostring(status.chunkId)==tostring(position.chunk) and status or nil,now)
   render()
 end)
 -- Draw supplies a documented elapsed time even when the Lua os library is absent.
@@ -181,7 +185,7 @@ function PluginShutdown()
   if not alive then return end
   alive=false
   for _,s in ipairs(subscriptions) do pcall(function() s.event.Unsubscribe(s.ref) end) end
-  subscriptions={}; net:cancel(); panel:destroy(); settings:destroy(); settingsWindow:destroy(); diagnostics:destroy(); shading:destroy()
+  subscriptions={}; net:cancel(); panel:destroy(); warning:destroy(); settings:destroy(); settingsWindow:destroy(); diagnostics:destroy(); shading:destroy()
 end
 panel:build(); settingsWindow:build()
 local ok,available=pcall(Player.IsAvailable)
