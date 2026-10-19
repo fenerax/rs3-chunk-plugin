@@ -1,67 +1,60 @@
--- Beta-only API probe, sent with the picker diagnostics. It looks for undocumented
--- achievement/diary configs and inventory names, reporting the first error text when a
--- lookup fails. It reads only the local player's own data and never prints stored settings.
+-- Beta-only API probe, sent with the picker diagnostics. It counts achievement progress
+-- and lists completed achievements by category, to plan automatic area-task completion.
+-- It reads only the local player's own data and never prints stored settings.
 local M = {}
-
-local function try(label, fn)
-  local ok, value = pcall(fn)
-  if ok then return label .. ": " .. tostring(value) end
-  local message = tostring(value):gsub("[%c]", " "):sub(1, 100)
-  return label .. ": error " .. message
-end
-
-local function count(container)
-  local n = 0
-  for _ in pairs(container) do n = n + 1 end
-  return n
-end
-
--- First entry of a config table, to see what one record looks like.
-local function first(container)
-  for key, value in pairs(container) do return key, value end
-end
-
--- Usertype metatables sometimes list their property names; show up to 12.
-local function members(value)
-  local names, mt = {}, getmetatable(value)
-  if type(mt) ~= "table" then return "no metatable table" end
-  for key in pairs(mt) do
-    if type(key) == "string" and not key:find("^__") then names[#names + 1] = key end
-  end
-  table.sort(names)
-  return #names .. " [" .. table.concat(names, ",", 1, math.min(12, #names)) .. "]"
-end
 
 local function short(value)
   local text = type(value) == "function" and "fn" or tostring(value)
   return (text:gsub("[%c]", " "):sub(1, 24))
 end
 
--- Every member of one achievement with its value, several per line, plus a count of
--- true values across all achievements for each boolean member (to find "completed").
+local function categoryName(n)
+  local ok, name = pcall(function() return id.Category.FromID(n) end)
+  return ok and name ~= nil and tostring(name) or tostring(n)
+end
+
+-- Pack short items into lines of at most 150 characters.
+local function pack(lines, prefix, items, maxLines)
+  local line, used = prefix, 0
+  for _, item in ipairs(items) do
+    if #line + #item + 2 > 150 then
+      used = used + 1
+      if used > maxLines then return end
+      lines[#lines + 1] = line; line = prefix
+    end
+    line = line .. (line == prefix and "" or "; ") .. item
+  end
+  if line ~= prefix and used < maxLines then lines[#lines + 1] = line end
+end
+
+-- Per the API docs, progress -2 means complete, -1 locked, 0 ready, -3 grace,
+-- -4 deprecated, and 1..10000 is partial progress. Count those, then show completed
+-- achievements grouped by category so diaries and area sets can be spotted.
 local function achievementLines(lines)
   local ok, err = pcall(function()
-    local _, sample = first(config.Achievement)
-    local mt, names = getmetatable(sample), {}
-    for key in pairs(mt) do if type(key) == "string" and not key:find("^__") then names[#names + 1] = key end end
-    table.sort(names)
-    local row, booleans = {}, {}
-    for _, name in ipairs(names) do
-      local okValue, value = pcall(function() return sample[name] end)
-      row[#row + 1] = name .. "=" .. (okValue and short(value) or "err")
-      if okValue and type(value) == "boolean" then booleans[#booleans + 1] = name end
-      if #row == 4 then lines[#lines + 1] = "Ach " .. table.concat(row, " "); row = {} end
-    end
-    if #row > 0 then lines[#lines + 1] = "Ach " .. table.concat(row, " ") end
-    for _, name in ipairs(booleans) do
-      local yes, total = 0, 0
-      for _, achievement in pairs(config.Achievement) do
-        total = total + 1
-        local okValue, value = pcall(function() return achievement[name] end)
-        if okValue and value == true then yes = yes + 1 end
+    local buckets = {[-4] = 0, [-3] = 0, [-2] = 0, [-1] = 0, [0] = 0, partial = 0}
+    local byCategory, done = {}, {}
+    for _, achievement in pairs(config.Achievement) do
+      local progress = achievement.progress
+      if progress > 0 then buckets.partial = buckets.partial + 1 else buckets[progress] = (buckets[progress] or 0) + 1 end
+      if progress == -2 then
+        local category = achievement.category
+        byCategory[category] = (byCategory[category] or 0) + 1
+        done[#done + 1] = {category = category, name = tostring(achievement.name)}
       end
-      lines[#lines + 1] = "Ach true " .. name .. ": " .. yes .. "/" .. total
     end
+    lines[#lines + 1] = "Ach progress: complete=" .. buckets[-2] .. " partial=" .. buckets.partial .. " ready=" .. buckets[0]
+      .. " locked=" .. buckets[-1] .. " grace=" .. buckets[-3] .. " deprecated=" .. buckets[-4]
+    local categories = {}
+    for category, n in pairs(byCategory) do categories[#categories + 1] = {category = category, n = n} end
+    table.sort(categories, function(a, b) return a.n > b.n end)
+    local summary = {}
+    for _, c in ipairs(categories) do summary[#summary + 1] = categoryName(c.category) .. "(" .. c.category .. ")=" .. c.n end
+    pack(lines, "Ach done by category: ", summary, 6)
+    table.sort(done, function(a, b) return a.category < b.category or (a.category == b.category and a.name < b.name) end)
+    local names = {}
+    for _, d in ipairs(done) do names[#names + 1] = d.category .. ":" .. short(d.name) end
+    pack(lines, "Ach done: ", names, 22)
   end)
   if not ok then lines[#lines + 1] = "Ach error " .. tostring(err):gsub("[%c]", " "):sub(1, 100) end
 end

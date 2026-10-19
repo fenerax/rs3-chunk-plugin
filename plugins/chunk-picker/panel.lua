@@ -72,11 +72,12 @@ function M.new(store, changed)
     -- Ignore stale responses for another chunk, even during the location debounce.
     local matching=position and status and tostring(status.chunkId)==chunk
     local state=matching and status.state or "unknown"
-    local label,colour="Not connected",0xA0A0A0FF
+    -- A status for the previous chunk means the picker is reachable and this chunk's answer is on its way.
+    local label,colour=status and "Checking..." or "Not connected",0xA0A0A0FF
     if state=="unlocked" then label="Unlocked"; colour=0x75D87AFF
     elseif state=="locked" then label="Locked — You're in a locked chunk"; colour=0xFF7878FF
     elseif state=="available" then label="Can be picked next"; colour=0xE5C66BFF
-    elseif matching then label="Unknown chunk" end
+    elseif matching then label="Not on the picker's map" end
     if self.collapsed then
       self.window:SetTitle(chunk.." · "..(state=="locked" and "Locked" or label))
     else
