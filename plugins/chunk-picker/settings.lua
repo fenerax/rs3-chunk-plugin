@@ -8,12 +8,29 @@ M.PALETTE = {{"Red",0xFF3B30},{"Orange",0xFF9F1C},{"Amber",0xFFB020},{"Yellow",0
 M.TARGETS = {{"lockedBorder","Locked border"},{"rollableBorder","Rollable border"},
   {"lockedFill","Locked fill"},{"rollableFill","Rollable fill"}}
 function M.hex(rgb) return string.format("#%06X", rgb) end
-function M.new(store, callbacks)
-  local self={failures={},labels={},previews={}}
+-- The resizable window: smallest size, and the room its title bar and padding take from the tabs.
+M.MIN_W, M.MIN_H, M.CHROME = 360, 300, 56
+-- options.windowed: build into our own movable, resizable window on the plugin layer instead of the
+-- hub's settings page, whose size the hub fixes.
+function M.new(store, callbacks, options)
+  options=options or {}
+  local self={failures={},labels={},previews={},windowed=options.windowed}
   local get=function(...) return store:get(...) end
+  local function geometry()
+    local ok,x,y,w,h=pcall(function() local r=self.window.root; return r.x,r.y,r.width,r.height end)
+    if ok and type(x)=="number" and type(y)=="number" and type(w)=="number" and type(h)=="number" then
+      return math.floor(x),math.floor(y),math.floor(w),math.floor(h)
+    end
+  end
+  local function saveGeometry()
+    local x,y,w,h=geometry()
+    if not x then return end
+    store:set("settingsX","Int",x); store:set("settingsY","Int",y); store:set("settingsW","Int",w); store:set("settingsH","Int",h)
+  end
   function self:destroy()
+    if self.window then saveGeometry() end
     if self.view then pcall(function() self.view:Destroy() end) end
-    self.view=nil; self.result=nil; self.labels={}; self.previews={}; self.picker=nil
+    self.view=nil; self.window=nil; self.pending=nil; self.result=nil; self.labels={}; self.previews={}; self.picker=nil
   end
   function self:message(value) if self.result then pcall(function() self.result.content=value end) end end
   -- Build each section on its own: on beta one failing control used to blank everything below it.
@@ -173,15 +190,13 @@ function M.new(store, callbacks)
       end,{inline=true})
     end)
   end
-  function self:mount(parent)
-    self:destroy(); self.failures={}
-    local view=prettyui.SimpleView.new(parent,{width=parent.width,height=parent.height}); self.view=view
-    view:AddTitle("Chunk Picker settings")
+  -- Tabs fill the given height; each page scrolls when its controls don't fit.
+  local function fill(view,height)
     local pages
     section("tabs",function()
       if not view.AddTabs then return end
       local tabs=view:AddTabs({{text="Connection"},{text="Look"},{text="Colours"}},
-        {scrollable=true,height=math.max(200,parent.height-60)})
+        {scrollable=true,height=math.max(200,height)})
       pages={tabs:GetPage(1),tabs:GetPage(2),tabs:GetPage(3)}
     end)
     -- No tabs in this PrettyUI: one long page with headings instead.
@@ -192,6 +207,53 @@ function M.new(store, callbacks)
     if pages[3]==view then section("heading",function() view:AddTitle("Colours") end) end
     colours(pages[3])
     refresh()
+  end
+  -- The hub's own page: its size is fixed by the hub, so offer the window instead of a title.
+  function self:mount(parent)
+    self:destroy(); self.failures={}
+    local view=prettyui.SimpleView.new(parent,{width=parent.width,height=parent.height}); self.view=view
+    section("window button",function()
+      view:AddSimpleButton("Open in a bigger window",function() callbacks.openWindow() end,
+        {tooltip="Movable and resizable; remembers its size"})
+    end)
+    fill(view,parent.height-60)
+  end
+  function self:open()
+    store:set("settingsWindow","Bool",true); self.error=nil; self:build()
+  end
+  function self:build()
+    self:destroy(); self.failures={}
+    if not store:get("settingsWindow","Bool",false) or self.error then return end
+    local ok,err=pcall(function()
+      local parent=ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
+      if not parent then return end
+      local w=math.max(M.MIN_W,math.min(store:get("settingsW","Int",520),parent.width))
+      local h=math.max(M.MIN_H,math.min(store:get("settingsH","Int",640),parent.height))
+      local x=math.max(0,math.min(store:get("settingsX","Int",math.floor((parent.width-w)/2)),parent.width-w))
+      local y=math.max(0,math.min(store:get("settingsY","Int",math.floor((parent.height-h)/2)),parent.height-h))
+      local window=prettyui.Window.new(parent,{title="Chunk Picker settings",x=x,y=y,width=w,height=h,
+        resizable=true,minWidth=M.MIN_W,minHeight=M.MIN_H,scrollable=false,
+        -- Closing only marks it; tick() tears it down outside PrettyUI's own close handling.
+        onClose=function() store:set("settingsWindow","Bool",false) end})
+      self.window=window; self.view=window; self.built={x=x,y=y,w=w,h=h}
+      fill(window,h-M.CHROME)
+    end)
+    -- Don't retry a window that failed to build every second; Open tries again.
+    if not ok then self.error=tostring(err):gsub("[%c]"," "):sub(1,100); self.failures[#self.failures+1]="window: "..self.error end
+  end
+  -- Once a second: follow close, moves and resizes. A new size rebuilds the tabs to fill it, but only
+  -- after it has held for a second so a resize in progress isn't interrupted.
+  function self:tick()
+    if not store:get("settingsWindow","Bool",false) then if self.window then self:destroy() end; return end
+    if not self.window then if not self.error then self:build() end; return end
+    local x,y,w,h=geometry()
+    if not x then self:build(); return end
+    if x~=self.built.x or y~=self.built.y then
+      self.built.x=x; self.built.y=y; store:set("settingsX","Int",x); store:set("settingsY","Int",y)
+    end
+    if w==self.built.w and h==self.built.h then self.pending=nil
+    elseif self.pending and self.pending.w==w and self.pending.h==h then self:build()
+    else self.pending={w=w,h=h} end
   end
   return self
 end

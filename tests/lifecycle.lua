@@ -144,6 +144,26 @@ emit('ContentLayerReady',{component=root}); assert(views[#views].children[1].con
 local old=windows[#windows]; root=component(nil,{width=800,height=600}); emit('WindowSizeChanged'); assert(old.destroyed)
 emit('GameStateChanged',{newState=37}); assert(windows[#windows].destroyed)
 emit('GameStateChanged',{newState=30}); assert(not windows[#windows].destroyed)
+-- The hub page can't be resized, so it opens the same tabs in a movable, resizable window.
+local function settingsWindow()
+  for i=#windows,1,-1 do if windows[i].title=='Chunk Picker settings' then return windows[i] end end
+end
+assert(not settingsWindow())
+click('Open in a bigger window'); local sw=settingsWindow()
+assert(sw and sw.options.resizable and values.settingsWindow==true and #sw.tabs==3)
+assert(sw.options.width==520 and sw.options.height==600) -- 640 clamped to the 800x600 layer
+-- Resizing: rebuilt at the new size once it has held for a second, and remembered.
+sw.root:SetSize(700,500)
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(settingsWindow()==sw)
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); local resized=settingsWindow()
+assert(resized~=sw and sw.destroyed and resized.options.width==700 and resized.options.height==500)
+assert(values.settingsW==700 and values.settingsH==500)
+-- Closing it stays closed after the next tick; reopening uses the remembered size.
+resized.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
+assert(resized.destroyed and values.settingsWindow==false)
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(settingsWindow()==resized)
+click('Open in a bigger window'); assert(settingsWindow().options.width==700)
+settingsWindow().options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 PluginShutdown(); assert(next(handlers)==nil); assert(windows[#windows].destroyed); assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()
 for _,line in ipairs(logs) do assert(not line:find('synthetic')) end

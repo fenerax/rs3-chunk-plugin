@@ -11,7 +11,7 @@ local now, alive, position, reason, playing=0,true,nil,"Waiting for login",false
 local subscriptions, warned={},{}
 local net=netModule.new({sequence=store:get("sequence","Int",0),now=function() return now end,
   saveSequence=function(n) store:set("sequence","Int",n) end})
-local panel,settings,diagnostics
+local panel,settings,settingsWindow,diagnostics
 local function guard(name,fn)
   return function(event)
     if not alive then return end
@@ -51,8 +51,9 @@ local function world()
   return {id=1,beta=store:get("beta","Bool",true)}
 end
 panel=require("panel").new(store,function() end)
-settings=require("settings").new(store,{
+local settingsCallbacks={
   connectionChanged=changed,
+  openWindow=function() settingsWindow:open() end,
   settingChanged=function(name)
     if name=="showPanel" then panel:build()
     elseif name:find("^shade") then shading:update(position,net.status,now)
@@ -67,7 +68,9 @@ settings=require("settings").new(store,{
     net:test(now,handle,key,function(ok,_,code)
       done(ok and "Connected to picker" or (net.message.." (HTTP "..tostring(code)..")"))
     end)
-  end})
+  end}
+settings=require("settings").new(store,settingsCallbacks)
+settingsWindow=require("settings").new(store,settingsCallbacks,{windowed=true})
 local function diagnosticLines()
   local lines={
     "Chunk Picker 0.1.0",
@@ -83,6 +86,8 @@ local function diagnosticLines()
     "Payload: "..(net.payloadWarning or "within 16 KB"),
     "Shading: "..shading:describe(),
     "Settings page: "..(#settings.failures==0 and "built" or table.concat(settings.failures,"; ")),
+    "Settings window: "..(not settingsWindow.window and (settingsWindow.error and "failed" or "closed")
+      or #settingsWindow.failures==0 and "built" or table.concat(settingsWindow.failures,"; ")),
   }
   for _,key in ipairs(require("store").keys) do lines[#lines+1]="DB "..key..": "..store:present(key) end
   for i=1,5 do
@@ -127,7 +132,7 @@ subscribe("GameStateChanged",function(e)
     playing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); panel:destroy(); shading:clear("waiting for login")
   end
 end)
-subscribe("WindowSizeChanged",function() panel:build() end)
+subscribe("WindowSizeChanged",function() panel:build(); settingsWindow:build() end)
 -- Terrain heights may load after the shading was built.
 subscribe("WorldCreated",function() shading:worldChanged() end)
 subscribe("WorldUpdated",function() shading:worldChanged() end)
@@ -167,7 +172,7 @@ subscribe("Logic",function()
   if panel.rebuild or math.floor(now)~=lastRender then
     -- PrettyUI moves root in its own hooks. Persist a changed position about once a second,
     -- not on every client tick of a drag.
-    lastRender=math.floor(now); panel:savePosition(); panel:ensure(); render()
+    lastRender=math.floor(now); panel:savePosition(); panel:ensure(); settingsWindow:tick(); render()
     if playing and store:get("showPanel","Bool",true) and not panel.window then panel:build() end
   end
 end)
@@ -175,9 +180,9 @@ function PluginShutdown()
   if not alive then return end
   alive=false
   for _,s in ipairs(subscriptions) do pcall(function() s.event.Unsubscribe(s.ref) end) end
-  subscriptions={}; net:cancel(); panel:destroy(); settings:destroy(); diagnostics:destroy(); shading:destroy()
+  subscriptions={}; net:cancel(); panel:destroy(); settings:destroy(); settingsWindow:destroy(); diagnostics:destroy(); shading:destroy()
 end
-panel:build()
+panel:build(); settingsWindow:build()
 local ok,available=pcall(Player.IsAvailable)
 if ok and available then enterGame() end
 diagnostics:console()
