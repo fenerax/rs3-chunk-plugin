@@ -48,9 +48,9 @@ ui={Interfaces={GetComponent=function() return root end},TextContentVisibilityMo
 id={Component={TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP=1},Quest={}}
 prettyui={Window={new=function(p,o) return host(p,o,true) end},SimpleView={new=function(p,o) return host(p,o,false) end},
   SimpleButton={new=function(p,text,action,o) local b=component(p,o); b.action=action; return b end}}
-PluginPermissions={httpAccess=1}
+PluginPermissions={httpAccess=1,chatAccess=2}
 local chat={}; Chat={AddMessage=function(m) chat[#chat+1]=m end}
-Plugin={urls={home={},scratch={}},HasPermission=function(p) assert(p==1); return allowed end}
+Plugin={urls={home={},scratch={}},HasPermission=function(p) if p==2 then return true end; assert(p==1); return allowed end}
 log=function(line) logs[#logs+1]=line end
 GameState={GAME=30}
 Player={IsAvailable=function() return true end,GetEntity=function() return {coordGrid={mapSquareX=53,mapSquareZ=45,level=0}} end,

@@ -10,10 +10,12 @@ function M.new(store)
   end
   -- Also into your own chatbox (local only, never sent to other players), so a missed banner stays readable.
   function self:post(message)
-    if store:get("warnChat","Bool",true) then
-      local ok=pcall(function() Chat.AddMessage("Chunk Picker: "..message) end)
-      if ok then self.posted=(self.posted or 0)+1 end
-    end
+    if not store:get("warnChat","Bool",true) then return end
+    -- Chat needs the optional chatAccess permission (console: ppe chunk-picker chatAccess).
+    local allowed=pcall(function() assert(Plugin.HasPermission(PluginPermissions.chatAccess)) end)
+    if not allowed then self.chatState="permission off"; return end
+    local ok=pcall(function() Chat.AddMessage("Chunk Picker: "..message) end)
+    if ok then self.posted=(self.posted or 0)+1; self.chatState=nil else self.chatState="AddMessage failed" end
   end
   function self:show(chunk,name,now,rollable)
     local message="You walked into "..(name and (name.." (chunk "..chunk..")") or ("chunk "..chunk))
@@ -80,7 +82,7 @@ function M.new(store)
   end
   function self:reset() self.warned=nil; self.rollKey=nil; self.queue={}; self:destroy() end
   function self:describe()
-    return (self.error or "ready").."; shown="..self.count.."; chat="..(self.posted or 0)..(self.window and "; on screen" or "")
+    return (self.error or "ready").."; shown="..self.count.."; chat="..(self.posted or 0)..(self.chatState and (" ("..self.chatState..")") or "")..(self.window and "; on screen" or "")
   end
   return self
 end
