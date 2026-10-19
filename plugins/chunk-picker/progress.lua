@@ -15,9 +15,20 @@ local function get(object, key)
     if ok then return value end
 end
 local function call(fn, ...)
-    if type(fn) ~= "function" then return nil end
+    -- Client functions can be callable userdata (config.Quest.FromID is), not only Lua functions.
+    if fn == nil then return nil end
     local ok, value = pcall(fn, ...)
     if ok then return value end
+end
+-- Beta: SkillType.ATTACK is the number the Player calls take; SkillType.FromID(n) returns
+-- text they reject. Prefer the named constants and accept FromID only when it is numeric.
+local function skillType(n)
+    local skill = get(SkillType, names[n + 1])
+    if skill == nil then
+        skill = call(get(SkillType, "FromID"), n)
+        if type(skill) == "string" then skill = nil end
+    end
+    return skill
 end
 local function available()
     return call(get(Player, "IsAvailable")) == true
@@ -139,7 +150,7 @@ function Progress:login(now)
     if not available() then return false end
     local skills, count = {}, 0
     for n = 0, 28 do
-        local skill = call(get(SkillType, "FromID"), n)
+        local skill = skillType(n)
         local value = skill ~= nil and skillValue(skill) or nil
         if value then skills[names[n + 1]], count = value, count + 1 end
     end
@@ -180,7 +191,7 @@ function Progress:skill(event, now)
     if self.skillCount ~= 29 or not available() then return end
     local skill = get(event, "skill")
     for n = 0, 28 do
-        if skill ~= nil and skill == call(get(SkillType, "FromID"), n) then
+        if skill ~= nil and skill == skillType(n) then
             local value = skillValue(skill)
             local name = names[n + 1]
             if value and not equal(value, self.skills[name]) then

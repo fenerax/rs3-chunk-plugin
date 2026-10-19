@@ -46,8 +46,14 @@ Plugin={urls={home={},scratch={}},HasPermission=function(p) assert(p==1); return
 log=function(line) logs[#logs+1]=line end
 GameState={GAME=30}
 Player={IsAvailable=function() return true end,GetEntity=function() return {coordGrid={mapSquareX=53,mapSquareZ=45,level=0}} end,
-  GetLevelUncapped=function() return 10 end,GetXPUncapped=function() return 1000 end}
-SkillType={FromID=function(n) return n end}
+  GetLevelUncapped=function(s) assert(type(s)=='number'); return 10 end,GetXPUncapped=function(s) assert(type(s)=='number'); return 1000 end}
+-- Beta shape: named numeric constants; FromID returns text the Player calls reject.
+SkillType={FromID=function(n) return 'skill'..n end}
+for n,name in ipairs({'ATTACK','DEFENCE','STRENGTH','HITPOINTS','RANGED','PRAYER','MAGIC','COOKING','WOODCUTTING',
+  'FLETCHING','FISHING','FIREMAKING','CRAFTING','SMITHING','MINING','HERBLORE','AGILITY','THIEVING','SLAYER','FARMING',
+  'RUNECRAFTING','HUNTER','CONSTRUCTION','SUMMONING','DUNGEONEERING','DIVINATION','INVENTION','ARCHAEOLOGY','NECROMANCY'}) do
+  SkillType[name]=n-1
+end
 QuestType={NORMAL=0}
 config={Quest={Q={id=1,type=0,name='Mock quest',hasStartedQuest=false,hasFinishedQuest=true,masterQuestVars={}}}}
 World={IsRegion=function() return false end}
