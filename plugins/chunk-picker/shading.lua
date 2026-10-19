@@ -14,15 +14,26 @@ local RANK = {locked = 2, available = 1}
 M.COLOURS = {classic = {0xFF3B30, 0xFFB020}, colourblind = {0x2F80FF, 0xFF9F1C}, subtle = {0xA83A32, 0xB8923E}}
 M.WIDTHS = {thin = 2, normal = 3, thick = 6}
 M.WALLS = {off = 0, low = 320, tall = 768}
+-- Whole-chunk fills, like the OSRS picker greying out chunks you can't use.
+M.FILLS = {grey = 0x8A8A8A, dark = 0x000000}
+M.FILL_ALPHA = {light = 0x40, medium = 0x70, strong = 0xA8}
+M.FILL_STEP = 4              -- tiles between fill samples: 17x17 points per chunk
+M.FILL_LIFT = 20             -- below the border lines so they stay on top
 function M.style(get)
   get = get or function(_, _, default) return default end
   local colours = get("shadeColours", "String", "classic"); if not M.COLOURS[colours] then colours = "classic" end
   local width = get("shadeWidth", "String", "normal"); if not M.WIDTHS[width] then width = "normal" end
   local walls = get("shadeWalls", "String", "low"); if not M.WALLS[walls] then walls = "low" end
   local grid = get("shadeGrid", "Bool", true) ~= false
+  local locked = get("shadeFillLocked", "String", "grey"); if not (M.FILLS[locked] or locked == "tint" or locked == "off") then locked = "grey" end
+  local rollable = get("shadeFillRollable", "String", "tint"); if not (rollable == "same" or rollable == "tint" or rollable == "off") then rollable = "tint" end
+  local strength = get("shadeFillStrength", "String", "medium"); if not M.FILL_ALPHA[strength] then strength = "medium" end
   local c = M.COLOURS[colours]
+  local fill = {locked = locked == "tint" and c[1] or M.FILLS[locked]}
+  fill.available = rollable == "same" and fill.locked or rollable == "tint" and c[2] or nil
   return {rgb = {[2] = c[1], [1] = c[2]}, width = M.WIDTHS[width], wall = M.WALLS[walls], grid = grid,
-    key = colours .. "/" .. width .. "/" .. walls .. "/" .. tostring(grid)}
+    fill = fill, fillAlpha = M.FILL_ALPHA[strength],
+    key = table.concat({colours, width, walls, tostring(grid), locked, rollable, strength}, "/")}
 end
 local ALPHA = {line = 0xE6, grid = 0x80, wallBase = 0x70, wallTop = 0x00}
 local function rgba(rgb, alpha) return rgb * 256 + alpha end
@@ -63,7 +74,7 @@ function M.geometry(rows, height, style)
     local x, z = id // 256, id % 256
     minX = math.min(minX or x, x); minZ = math.min(minZ or z, z)
   end
-  local out = {positions = {}, rgba = {}, lines = {}, tris = {}, parts = {}, edges = 0, walls = 0, missing = 0,
+  local out = {positions = {}, rgba = {}, lines = {}, tris = {}, parts = {}, edges = 0, walls = 0, fills = 0, missing = 0,
     originX = (minX or 0) * M.TILES * M.TILE, originZ = (minZ or 0) * M.TILES * M.TILE}
   if not minX then return out end
   local cache = {}
@@ -117,6 +128,33 @@ function M.geometry(rows, height, style)
       out.parts[#out.parts + 1] = {p0 = p0, p1 = #out.positions, l0 = l0, l1 = #out.lines, t0 = t0, t1 = #out.tris}
     end
   end
+  -- A coarse terrain-following sheet over one chunk, both windings like the walls.
+  local function fill(id, rgb)
+    local step, n = M.FILL_STEP, M.TILES // M.FILL_STEP
+    local tx, tz = (id // 256) * M.TILES, (id % 256) * M.TILES
+    local p0, t0, colour, index = #out.positions, #out.tris, rgba(rgb, style.fillAlpha), {}
+    for i = 0, n do
+      for j = 0, n do
+        local h = ground(tx + i * step, tz + j * step)
+        if h then index[i * (n + 1) + j] = vertex(tx + i * step, tz + j * step, h + M.FILL_LIFT, colour)
+        else out.missing = out.missing + 1 end
+      end
+    end
+    local t = out.tris
+    for i = 0, n - 1 do
+      for j = 0, n - 1 do
+        local a, b = index[i * (n + 1) + j], index[(i + 1) * (n + 1) + j]
+        local c, d = index[(i + 1) * (n + 1) + j + 1], index[i * (n + 1) + j + 1]
+        if a and b and c and d then
+          for _, v in ipairs({a, b, c, a, c, d, a, c, b, a, d, c}) do t[#t + 1] = v end
+        end
+      end
+    end
+    if #out.tris > t0 then
+      out.fills = out.fills + 1
+      out.parts[#out.parts + 1] = {p0 = p0, p1 = #out.positions, l0 = #out.lines, l1 = #out.lines, t0 = t0, t1 = #out.tris}
+    end
+  end
   local function rank(id) local s = rows[id]; return s and (RANK[s] or 0) or nil end
   local ids = {}
   for id in pairs(rows) do ids[#ids + 1] = id end
@@ -139,6 +177,10 @@ function M.geometry(rows, height, style)
       -- A wall marks where the state changes; matching or unseen neighbours get a faint grid line.
       if top > 0 then edge(side[1], side[2], side[3], side[4], top, other ~= nil and other ~= own) end
     end
+  end
+  for _, id in ipairs(ids) do
+    local rgb = style.fill and style.fill[rows[id]]
+    if rgb then fill(id, rgb) end
   end
   return out
 end
@@ -186,7 +228,7 @@ function M.new(options)
     for i = from, #self.shapes do local s = self.shapes[i]; if s then pcall(function() s.visible = false end) end end
   end
   function self:clear(state)
-    self.signature = nil; self.incomplete = false; self.edges = 0; self.walls = 0
+    self.signature = nil; self.incomplete = false; self.edges = 0; self.walls = 0; self.fills = 0
     if state then self.state = state end
     hide(1)
   end
@@ -223,7 +265,7 @@ function M.new(options)
       return h
     end, style)
     self.builtAt = now; self.incomplete = geometry.missing > 0
-    self.edges = geometry.edges; self.walls = geometry.walls
+    self.edges = geometry.edges; self.walls = geometry.walls; self.fills = geometry.fills
     local parts = M.split(geometry)
     if #parts == 0 then
       hide(1)
@@ -237,7 +279,8 @@ function M.new(options)
       local data = ShapeData.new()
       local positions = {}
       for j, p in ipairs(part.positions) do positions[j] = Vector3.new(p[1], p[2], p[3]) end
-      data.positions = positions; data.rgba = part.rgba; data.lines = part.lines
+      data.positions = positions; data.rgba = part.rgba
+      if #part.lines > 0 then data.lines = part.lines end
       if #part.tris > 0 then data.tris = part.tris end
       if shape:SetShapeData(data) == false then
         rejected = rejected + 1; shape.visible = false
@@ -257,7 +300,7 @@ function M.new(options)
       #parts, drawn, rejected, largest, parts[1].originX, parts[1].originZ)
   end
   function self:describe()
-    return self.state .. "; edges=" .. self.edges .. " walls=" .. self.walls
+    return self.state .. "; edges=" .. self.edges .. " walls=" .. self.walls .. " fills=" .. (self.fills or 0)
   end
   -- Temporary: a bright square at the player's feet proves whether instances draw at all,
   -- and the lines below compare its coordinates with the chunk geometry.
