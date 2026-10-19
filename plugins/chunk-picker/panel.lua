@@ -39,11 +39,12 @@ function M.new(store, changed)
       local width=330
       local savedX=store:get("panelX","Int",math.floor((parent.width-width)/2))
       local savedY=store:get("panelY","Int",40)
-      local height=self.collapsed and 40 or 190
+      -- Collapsed: just the title bar. 40 left a sliver of empty frame under it on beta.
+      local height=self.collapsed and 34 or 190
       local x=math.max(0,math.min(savedX,math.max(0,parent.width-width)))
       local y=math.max(0,math.min(savedY,math.max(0,parent.height-height)))
       local w=prettyui.Window.new(parent,{title="Chunk Picker",x=x,y=y,width=width,height=height,
-        minWidth=220,minHeight=40,scrollable=false,onClose=function() store:set("showPanel","Bool",false); changed() end})
+        minWidth=220,minHeight=30,scrollable=false,onClose=function() store:set("showPanel","Bool",false); changed() end})
       self.window=w; self.x=x; self.y=y
       if x~=savedX or y~=savedY then
         local a=store:set("panelX","Int",x); local b=store:set("panelY","Int",y)

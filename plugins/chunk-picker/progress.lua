@@ -49,8 +49,14 @@ local function skillValue(skill)
     end
 end
 local function normalQuest(quest)
-    local normal = get(QuestType, "NORMAL") or 0
-    return quest ~= nil and get(quest, "deprecated") ~= true and get(quest, "type") == normal
+    if quest == nil or get(quest, "deprecated") == true then return false end
+    local kind = get(quest, "type")
+    local normal = get(QuestType, "NORMAL")
+    if normal ~= nil then return kind == normal end
+    -- The QuestType enum may not be a global. Keep every quest except ones that are
+    -- clearly tutorial or seasonal, rather than dropping them all.
+    local text = tostring(kind or ""):upper()
+    return not text:find("TUTORIAL") and not text:find("SEASONAL")
 end
 local function enumerate()
     local source = get(config, "Quest")

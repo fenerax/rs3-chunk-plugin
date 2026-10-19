@@ -84,6 +84,7 @@ local function diagnosticLines()
     lines[#lines+1]=r and ("HTTP "..i..": "..r.code.." timedOut="..tostring(r.timedOut).." failed="..tostring(r.failed).." errorInfo="..r.errorInfo)
       or ("HTTP "..i..": none")
   end
+  for _,line in ipairs(require("probe").lines()) do lines[#lines+1]=line end
   return lines
 end
 diagnostics=require("diagnostics").new(diagnosticLines)
