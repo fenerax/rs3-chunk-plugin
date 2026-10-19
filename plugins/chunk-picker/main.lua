@@ -164,6 +164,7 @@ subscribe("ServerLogic",function()
   shading:update(position,net.status,now); shading:marker()
   local status=net.status
   warning:update(position,position and status and tostring(status.chunkId)==tostring(position.chunk) and status or nil,now)
+  warning:roll(status,now)
   render()
 end)
 -- Draw supplies a documented elapsed time even when the Lua os library is absent.

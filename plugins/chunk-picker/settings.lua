@@ -6,7 +6,7 @@ M.PALETTE = {{"Red",0xFF3B30},{"Orange",0xFF9F1C},{"Amber",0xFFB020},{"Yellow",0
   {"Pink",0xFF4FA3},{"White",0xFFFFFF},{"Grey",0x8A8A8A},{"Black",0x000000}}
 -- What the Colours tab can edit. Fills switch to "custom" when given a colour of their own.
 M.TARGETS = {{"lockedBorder","Locked border"},{"rollableBorder","Rollable border"},
-  {"lockedFill","Locked fill"},{"rollableFill","Rollable fill"}}
+  {"lockedFill","Locked fill"},{"rollableFill","Rollable fill"},{"partner","Partner's chunks"}}
 function M.hex(rgb) return string.format("#%06X", rgb) end
 -- Text drawn in a dark colour vanishes on the dark settings background; lift it towards white.
 function M.readable(rgb)
@@ -51,7 +51,8 @@ function M.new(store, callbacks, options)
   local function current(target)
     local style=shading.style(get)
     if target=="lockedBorder" then return style.rgb[2] elseif target=="rollableBorder" then return style.rgb[1]
-    elseif target=="lockedFill" then return style.fill.locked else return style.fill.available end
+    elseif target=="lockedFill" then return style.fill.locked elseif target=="partner" then return style.rgb.partner
+    else return style.fill.available end
   end
   local function refresh()
     for key,entry in pairs(self.labels) do
@@ -75,6 +76,8 @@ function M.new(store, callbacks, options)
       store:set("shadeColours","String","custom")
     elseif target=="lockedFill" then
       store:set("shadeRgbFillLocked","String",M.hex(rgb)); store:set("shadeFillLocked","String","custom")
+    elseif target=="partner" then
+      store:set("shadeRgbPartner","String",M.hex(rgb))
     else
       store:set("shadeRgbFillRollable","String",M.hex(rgb)); store:set("shadeFillRollable","String","custom")
     end
@@ -149,7 +152,7 @@ function M.new(store, callbacks, options)
   end
   local function look(page)
     section("borders",function()
-      checkboxes(page,{{"shadeChunks","Show chunk borders and fills"},{"shadeGrid","Lines between locked chunks"},{"warnLocked","Warn when I walk into a locked chunk"}},true)
+      checkboxes(page,{{"shadeChunks","Show chunk borders and fills"},{"shadeGrid","Lines between locked chunks"},{"warnLocked","Warn when I walk into a locked chunk"},{"warnRoll","Tell me when a roll is waiting"},{"showPartner","Show my partner on the panel"}},true)
       choiceRow(page,"shadeWidth","Line width","normal",{{"thin","Thin"},{"normal","Normal"},{"thick","Thick"}})
       choiceRow(page,"shadeWalls","Glow walls","low",{{"off","Off"},{"low","Low"},{"tall","Tall"}})
     end)
@@ -158,6 +161,7 @@ function M.new(store, callbacks, options)
       choiceRow(page,"shadeFillRollable","Fill rollable chunks","tint",{{"tint","Border colour"},{"same","Same as locked"},{"off","Off"}})
       choiceRow(page,"shadeFillStyle","Fill style","haze",{{"haze","Haze box"},{"ground","Ground only"}})
       choiceRow(page,"shadeFillStrength","Fill strength","medium",{{"light","Light"},{"medium","Medium"},{"strong","Strong"},{"solid","Solid"}})
+      choiceRow(page,"shadePartner","Chunks only your partner unlocked","outline",{{"outline","Outline"},{"tint","Light tint"},{"off","Off"}})
       page:AddText("Pick exact colours on the Colours tab.")
     end)
   end

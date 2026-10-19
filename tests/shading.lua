@@ -61,7 +61,25 @@ end)
 eq(style.width,3); eq(style.wall,0); eq(style.grid,false); eq(style.rgb[2],0x2F80FF)
 g=shading.geometry(block,flat,style); validate(g); eq(#g.tris,0); eq(g.walls,0); eq(g.edges,4) -- only the boundary edges
 for i in ipairs(g.positions) do eq(g.rgba[i]>>8,0x2F80FF) end
-eq(shading.style().key,'classic/normal/low/true/dark/tint/medium/haze///')
+eq(shading.style().key,'classic/normal/low/true/dark/tint/medium/haze////outline/3065014')
+-- Shared access: a chunk only the partner unlocked arrives as its own state.
+local duo=net.nearby(json.decode('[{"chunkId":"13613","state":"unlocked","by":"me"},{"chunkId":"13614","state":"unlocked","by":"partner"},'..
+  '{"chunkId":"13612","state":"unlocked","by":"both"},{"chunkId":"13615","state":"locked","by":"partner"}]'))
+eq(duo[NARDAH],'unlocked'); eq(duo[NARDAH+1],'partner'); eq(duo[NARDAH-1],'unlocked'); eq(duo[NARDAH+2],'locked')
+-- Outline (default): one line where your open chunk meets the partner's, in the partner colour, no wall.
+local function partnerStyle(mode) return shading.style(function(key,_,default)
+  if key=='shadePartner' then return mode end
+  if key:find('^shadeFill') and key~='shadeFillStrength' then return 'off' end return default end) end
+g=shading.geometry({[NARDAH]='unlocked',[NARDAH+1]='partner'},flat,partnerStyle('outline')); validate(g)
+eq(g.edges,1); eq(g.walls,0); eq(#g.tris,0); for i in ipairs(g.positions) do eq(g.rgba[i]>>8,shading.PARTNER) end
+-- Locked beside the partner's chunk keeps the locked colour and wall.
+g=shading.geometry({[NARDAH]='locked',[NARDAH+1]='partner'},flat,partnerStyle('outline')); validate(g)
+eq(g.walls,1); for i in ipairs(g.positions) do assert(g.rgba[i]>>8==0xFF3B30) end
+-- Light tint: a faint ground sheet, never a haze box; off draws nothing.
+g=shading.geometry({[NARDAH]='unlocked',[NARDAH+1]='partner'},flat,partnerStyle('tint')); validate(g)
+eq(g.edges,0); eq(g.fills,1)
+for i,p in ipairs(g.positions) do eq(p[2],1000+shading.FILL_LIFT); eq(g.rgba[i],shading.PARTNER*256+0x20) end
+g=shading.geometry({[NARDAH]='unlocked',[NARDAH+1]='partner'},flat,partnerStyle('off')); eq(#g.positions,0)
 -- Custom colours: hex parsing, and a custom choice without a valid colour falls back to the default.
 eq(shading.hex('#ff3b30'),0xFF3B30); eq(shading.hex(' 2F80FF '),0x2F80FF); eq(shading.hex('#12345'),nil); eq(shading.hex(nil),nil)
 local custom=shading.style(function(key,_,default) return ({shadeColours='custom',shadeRgbLocked='#112233',shadeRgbRollable='#445566',

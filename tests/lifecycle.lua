@@ -78,7 +78,7 @@ end}
 require('main')
 assert(#logs>20); assert(#windows>=1)
 emit('ServerLogic'); local w=windows[#windows]
-assert(w.children[1].content:find('13613')); assert(w.children[4].content:find('Allow web access'))
+assert(w.children[1].content:find('13613')); assert(w.children[5].content:find('Allow web access'))
 assert(#requests==0)
 w.root:SetPos(400,75); emit('Logic'); assert(values.panelX==400 and values.panelY==75)
 w.root.children[1].action(); emit('Logic'); w=windows[#windows]
@@ -105,9 +105,14 @@ assert(body.skills.ATTACK and body.quests.finished[1]=='Mock quest')
 assert(#body.diagnostics>10 and #body.diagnostics<=80)
 for _,line in ipairs(body.diagnostics) do assert(#line<=160 and not line:find('synthetic')) end
 local built=false; for _,line in ipairs(body.diagnostics) do if line=='Settings page: built' then built=true end end; assert(built)
-req.callback({responseCode=200,data='{"state":"locked","chunkId":"13613","chunkName":"Nardah","nearby":[{"chunkId":"13613","state":"locked"},{"chunkId":"13614","state":"unlocked"}]}'})
+req.callback({responseCode=200,data='{"state":"locked","chunkId":"13613","chunkName":"Nardah","unlockedChunkCount":7,"pickableCount":3,'..
+  '"partners":[{"name":"Pat<b>","chunkId":"12850","chunkName":"Lumbridge","seenAt":"x"}],'..
+  '"pendingRoll":[{"chunkId":"12593","chunkName":"Draynor"},{"chunkId":"12594","chunkName":null}],'..
+  '"nearby":[{"chunkId":"13613","state":"locked"},{"chunkId":"13614","state":"unlocked"}]}'})
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); w=windows[#windows]
 assert(w.children[1].content:find('Nardah')); assert(w.children[2].content:find("You're in a locked chunk"))
+assert(w.children[3].content=='7 unlocked · 3 can be picked next')
+assert(w.children[4].content=='Patb: Lumbridge (12850); Roll waiting: Draynor or 12594',w.children[4].content)
 assert(w.children[2].rgba==0xFF7878FF)
 emit('Draw',{timeDeltaSecs=60}); emit('ServerLogic')
 local shape=shapes['chunk-picker-shading-1']; assert(shape and shape.visible and #shape.data.positions>0)
@@ -118,9 +123,13 @@ assert(wall) -- Nardah locked beside an unlocked chunk: a wall on their shared e
 local function banners() local n,last=0,nil
   for _,b in ipairs(windows) do if b.title=='Locked chunk' then n=n+1; last=b end end; return n,last
 end
+local function rollBanner() for _,b in ipairs(windows) do if b.title=='Roll waiting' then return b end end end
 local n,banner=banners(); assert(n==1 and not banner.destroyed and banner.children[1].content:find('Nardah'))
+assert(not rollBanner(),'the roll banner waits for the locked one')
 emit('Draw',{timeDeltaSecs=2}); emit('ServerLogic'); assert(banners()==1 and not banner.destroyed)
 emit('Draw',{timeDeltaSecs=4}); emit('ServerLogic'); assert(banner.destroyed and banners()==1) -- no repeat while still inside
+local roll=rollBanner(); assert(roll and not roll.destroyed and roll.children[1].content:find('Draynor or chunk 12594'))
+emit('Draw',{timeDeltaSecs=6}); emit('ServerLogic'); assert(roll.destroyed and rollBanner()==roll) -- once per waiting roll
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',false); assert(values.shadeChunks==false and not shape.visible)
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',true); assert(shape.visible)
 for _,c in ipairs(settings.children) do if c.content=='Thick' then c.action() end end

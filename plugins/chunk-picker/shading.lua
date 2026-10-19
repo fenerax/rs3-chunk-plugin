@@ -22,6 +22,9 @@ M.FILL_ALPHA = {light = 0x40, medium = 0x70, strong = 0xA8, solid = 0xE8}
 M.HAZE = 3072                -- lid height in fine units (6 tiles)
 M.FILL_STEP = 4              -- tiles between fill samples: 17x17 points per chunk
 M.FILL_LIFT = 20             -- below the border lines so they stay on top
+-- Chunks only your partner has unlocked (shared access): an outline, a light ground tint, or nothing.
+M.PARTNER = 0x2EC4B6
+M.PARTNER_MODES = {outline = true, tint = true, off = true}
 -- "#RRGGBB" or "RRGGBB" -> 0xRRGGBB; anything else -> nil.
 function M.hex(text)
   local digits = type(text) == "string" and text:match("^%s*#?(%x%x%x%x%x%x)%s*$")
@@ -42,15 +45,20 @@ function M.style(get)
   if not (rollable == "same" or rollable == "tint" or rollable == "off" or rollable == "custom" and fillRollable) then rollable = "tint" end
   local strength = get("shadeFillStrength", "String", "medium"); if not M.FILL_ALPHA[strength] then strength = "medium" end
   local shape = get("shadeFillStyle", "String", "haze"); if shape ~= "ground" then shape = "haze" end
+  local partner = get("shadePartner", "String", "outline"); if not M.PARTNER_MODES[partner] then partner = "outline" end
+  local partnerRgb = M.hex(get("shadeRgbPartner", "String", "")) or M.PARTNER
   local c = colours == "custom" and {customLocked, customRollable} or M.COLOURS[colours]
   local fill = {locked = locked == "tint" and c[1] or locked == "custom" and fillLocked or M.FILLS[locked]}
   fill.available = rollable == "same" and fill.locked or rollable == "tint" and c[2] or rollable == "custom" and fillRollable or nil
-  return {rgb = {[2] = c[1], [1] = c[2]}, width = M.WIDTHS[width], wall = M.WALLS[walls], grid = grid,
+  fill.partner = partner == "tint" and partnerRgb or nil
+  return {rgb = {[2] = c[1], [1] = c[2], partner = partnerRgb}, width = M.WIDTHS[width], wall = M.WALLS[walls], grid = grid,
+    partner = partner,
     -- Bright tints read far heavier than dark ones (beta: amber at medium looked like a solid wall),
     -- so a rollable chunk in its own colour gets half the strength; you still want to see into it.
     fill = fill, fillAlpha = M.FILL_ALPHA[strength], tintAlpha = M.FILL_ALPHA[strength] // 2, haze = shape == "haze" and M.HAZE or 0,
     key = table.concat({colours, width, walls, tostring(grid), locked, rollable, strength, shape,
-      colours == "custom" and c[1] .. "," .. c[2] or "", locked == "custom" and fillLocked or "", rollable == "custom" and fillRollable or ""}, "/")}
+      colours == "custom" and c[1] .. "," .. c[2] or "", locked == "custom" and fillLocked or "", rollable == "custom" and fillRollable or "",
+      partner, partner ~= "off" and partnerRgb or ""}, "/")}
 end
 local ALPHA = {line = 0xE6, grid = 0x80, wallBase = 0x70, wallTop = 0x00}
 local function rgba(rgb, alpha) return rgb * 256 + alpha end
@@ -113,7 +121,8 @@ function M.geometry(rows, height, style)
     out.edges = out.edges + 1
     local p0, l0, t0 = #out.positions, #out.lines, #out.tris
     local rgb = style.rgb[rank]
-    local wall = boundary and style.wall > 0
+    -- Partner outlines mark ownership, not a barrier: no glow wall.
+    local wall = boundary and style.wall > 0 and rank ~= "partner"
     local lineColour = rgba(rgb, boundary and ALPHA.line or ALPHA.grid)
     local previous, previousBase, previousTop
     for step = 0, M.TILES do
@@ -150,11 +159,15 @@ function M.geometry(rows, height, style)
     local step, n = M.FILL_STEP, M.TILES // M.FILL_STEP
     local tx, tz = (id // 256) * M.TILES, (id % 256) * M.TILES
     local tinted = rows[id] == "available" and rgb ~= style.fill.locked
-    local p0, t0, colour, index = #out.positions, #out.tris, rgba(rgb, tinted and style.tintAlpha or style.fillAlpha), {}
+    local partner = rows[id] == "partner"
+    local alpha = partner and M.FILL_ALPHA.light // 2 or tinted and style.tintAlpha or style.fillAlpha
+    local p0, t0, colour, index = #out.positions, #out.tris, rgba(rgb, alpha), {}
+    -- A partner's chunk is open to you: a faint tint on the ground, never a haze box.
+    local lift = not partner and style.haze > 0 and style.haze or M.FILL_LIFT
     for i = 0, n do
       for j = 0, n do
         local h = ground(tx + i * step, tz + j * step)
-        if h then index[i * (n + 1) + j] = vertex(tx + i * step, tz + j * step, h + (style.haze > 0 and style.haze or M.FILL_LIFT), colour)
+        if h then index[i * (n + 1) + j] = vertex(tx + i * step, tz + j * step, h + lift, colour)
         else out.missing = out.missing + 1 end
       end
     end
@@ -168,7 +181,7 @@ function M.geometry(rows, height, style)
         end
       end
     end
-    if style.haze > 0 then
+    if style.haze > 0 and not partner then
       -- Curtains close the box only toward chunks with a different (or no) fill, so neighbouring
       -- locked chunks read as one continuous haze. Chunks beyond the nearby block stay open.
       local cx, cz = id // 256, id % 256
@@ -211,8 +224,8 @@ function M.geometry(rows, height, style)
     local tx, tz = cx * M.TILES, cz * M.TILES
     -- Each shared edge belongs to the chunk north or east of it; perimeter edges to the inside chunk.
     local sides = {
-      {tx, tz, 1, 0, cz > 0 and rank(id - 1) or nil},              -- south
-      {tx, tz, 0, 1, cx > 0 and rank(id - 256) or nil},            -- west
+      {tx, tz, 1, 0, cz > 0 and rank(id - 1) or nil, cz > 0 and id - 1},              -- south
+      {tx, tz, 0, 1, cx > 0 and rank(id - 256) or nil, cx > 0 and id - 256},          -- west
     }
     if not (cz < 199 and rank(id + 1)) then sides[#sides + 1] = {tx, tz + M.TILES, 1, 0, nil} end       -- north
     if not (cx < 199 and rank(id + 256)) then sides[#sides + 1] = {tx + M.TILES, tz, 0, 1, nil} end     -- east
@@ -220,7 +233,11 @@ function M.geometry(rows, height, style)
       local other = side[5]
       local top = math.max(own, other or 0)
       -- A wall marks where the state changes; matching or unseen neighbours get a faint grid line.
-      if top > 0 then edge(side[1], side[2], side[3], side[4], top, other ~= nil and other ~= own) end
+      if top > 0 then edge(side[1], side[2], side[3], side[4], top, other ~= nil and other ~= own)
+      elseif other ~= nil and style.partner == "outline" and (state == "partner") ~= (rows[side[6]] == "partner") then
+        -- Between your own open chunk and one only your partner opened.
+        edge(side[1], side[2], side[3], side[4], "partner", true)
+      end
     end
   end
   for _, id in ipairs(ids) do

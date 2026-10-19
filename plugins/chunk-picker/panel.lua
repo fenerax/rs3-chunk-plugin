@@ -1,6 +1,41 @@
 -- PrettyUI owns native chrome, dragging, flow and bounds. Only the title toggle is placed explicitly.
 -- root/closeButton are source-verified PrettyUI fields, not documented API; guard them on beta.
 local M = {}
+local function clean(text,limit) return type(text)=="string" and (text:gsub("[<>%c]","")):sub(1,limit) or nil end
+-- "Floor 1 · 7 unlocked · 3 can be picked next"
+function M.counts(position,status)
+  local parts={}
+  if position and position.floor~=0 then parts[#parts+1]="Floor "..position.floor end
+  if type(status)=="table" then
+    if math.type(status.unlockedChunkCount)=="integer" then parts[#parts+1]=status.unlockedChunkCount.." unlocked" end
+    if math.type(status.pickableCount)=="integer" then parts[#parts+1]=status.pickableCount.." can be picked next" end
+  end
+  return table.concat(parts," · ")
+end
+-- Partner chunks and a waiting roll, from the picker's status.
+function M.extra(status,showPartner)
+  if type(status)~="table" then return "" end
+  local lines={}
+  if showPartner and type(status.partners)=="table" then
+    for i=1,math.min(#status.partners,3) do
+      local p=status.partners[i]
+      local name=type(p)=="table" and clean(p.name,24)
+      if name then
+        local chunk=clean(p.chunkId,12)
+        lines[#lines+1]=name..": "..(chunk and ((clean(p.chunkName,32) or "Chunk").." ("..chunk..")") or "not in game")
+      end
+    end
+  end
+  if type(status.pendingRoll)=="table" and #status.pendingRoll>0 then
+    local names={}
+    for i=1,math.min(#status.pendingRoll,2) do
+      local row=status.pendingRoll[i]
+      names[#names+1]=type(row)=="table" and (clean(row.chunkName,24) or clean(row.chunkId,12)) or "?"
+    end
+    lines[#lines+1]="Roll waiting: "..table.concat(names," or ")
+  end
+  return table.concat(lines,"; ")
+end
 function M.new(store, changed)
   local self={store=store, positionSaved="not moved", collapsed=store:get("collapsed","Bool",false)}
   function self:savePosition()
@@ -40,7 +75,7 @@ function M.new(store, changed)
       local savedX=store:get("panelX","Int",math.floor((parent.width-width)/2))
       local savedY=store:get("panelY","Int",40)
       -- Collapsed: just the title bar. On beta 40 left a sliver under it and 34 clipped the bottom border.
-      local height=self.collapsed and 37 or 190
+      local height=self.collapsed and 37 or 236
       local x=math.max(0,math.min(savedX,math.max(0,parent.width-width)))
       local y=math.max(0,math.min(savedY,math.max(0,parent.height-height)))
       local w=prettyui.Window.new(parent,{title="Chunk Picker",x=x,y=y,width=width,height=height,
@@ -59,6 +94,7 @@ function M.new(store, changed)
         self.chunk=w:AddText({text="Waiting for location",height=22,maxLines=1})
         self.state=w:AddText({text="Not connected",height=36,maxLines=2})
         self.floor=w:AddText({text="",height=18,maxLines=1})
+        self.extra=w:AddText({text="",height=36,maxLines=2})
         self.sync=w:AddText({text="Open plugin Settings to connect",height=36,maxLines=2})
       end
       self.error=nil
@@ -85,7 +121,8 @@ function M.new(store, changed)
       local name=matching and status.chunkName
       self.chunk.content=(position and "Chunk " or "")..chunk..(type(name)=="string" and (" · "..name:gsub("[<>%c]","")) or "")
       self.state.content=label; self.state.rgba=colour
-      self.floor.content=position and position.floor~=0 and ("Floor "..position.floor) or ""
+      self.floor.content=M.counts(position,status)
+      self.extra.content=M.extra(status,store:get("showPartner","Bool",true))
       self.sync.content=syncText
     end
   end

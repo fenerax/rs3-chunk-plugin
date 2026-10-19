@@ -67,7 +67,10 @@ function M.nearby(rows)
     local row=rows[i]
     local id=type(row)=="table" and type(row.chunkId)=="string" and #row.chunkId<=5 and row.chunkId:match("^%d+$")
       and math.tointeger(tonumber(row.chunkId))
-    if id and id//256<=199 and id%256<=199 and STATES[row.state] then out[id]=row.state; count=count+1 end
+    if id and id//256<=199 and id%256<=199 and STATES[row.state] then
+      -- Shared access: a chunk only your partner unlocked is open to you but drawn in its own colour.
+      out[id]=row.state=="unlocked" and row.by=="partner" and "partner" or row.state; count=count+1
+    end
   end
   return count>0 and out or nil
 end
