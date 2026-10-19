@@ -74,7 +74,7 @@ local s=shading.new({enabled=function() return enabled end})
 local pos={x=53,z=45,floor=0}
 local status={chunkId='13613',state='unlocked',nearby={[NARDAH]='unlocked',[NARDAH+1]='locked',[NARDAH-1]='locked'}}
 s:update(pos,status,1)
-local inst=instances[shading.NAME]; assert(inst and inst.visible); eq(inst.sets,1); eq(inst.lineWidth,3); eq(inst.ignoreDepth,false)
+local inst=instances[shading.NAME]; assert(inst and inst.visible); eq(inst.sets,1); eq(inst.lineWidth,3); eq(inst.ignoreDepth,shading.DEBUG)
 eq(inst.translation.x,53*64*512); eq(inst.translation.y,0); eq(inst.translation.z,44*64*512)
 assert(s:describe():find('^drawn; edges=%d+ walls=2'))
 local calls=heightCalls

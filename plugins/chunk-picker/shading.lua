@@ -7,6 +7,7 @@ M.TILE = 512                 -- fine units per tile
 M.TILES = 64                 -- tiles per map square (chunk)
 M.LIFT = 16                  -- keeps ground lines just above the terrain
 M.WALL = 320                 -- height of the translucent wall on a state boundary
+M.DEBUG = true               -- beta debugging: draw through terrain, show a marker, report coordinates
 -- Rank decides which side of an edge colours it. Unlocked and unknown draw nothing.
 local RANK = {locked = 2, available = 1}
 local RGB = {[2] = 0xFF3B30, [1] = 0xFFB020}
@@ -186,15 +187,61 @@ function M.new(options)
     if #geometry.tris > 0 then data.tris = geometry.tris end
     if shape:SetShapeData(data) == false then self.state = "shape data rejected"; shape.visible = false; return end
     shape.translation = Vector3.new(geometry.originX, 0, geometry.originZ)
-    shape.lineWidth = 3; shape.ignoreDepth = false; shape.visible = true
+    -- First beta test showed nothing; while debugging, draw through terrain so depth can't hide it.
+    shape.lineWidth = 3; shape.ignoreDepth = M.DEBUG; shape.visible = true
     self.state = "drawn" .. (self.incomplete and " (some terrain not loaded)" or "")
+    local lo, hi
+    for _, p in ipairs(geometry.positions) do lo = math.min(lo or p[2], p[2]); hi = math.max(hi or p[2], p[2]) end
+    local p1 = geometry.positions[1]
+    self.debug = string.format("origin=%d,%d y=%s..%s n=%d lines=%d tris=%d first=%d,%d,%d",
+      geometry.originX, geometry.originZ, tostring(lo), tostring(hi), #geometry.positions, #geometry.lines // 2,
+      #geometry.tris // 3, p1[1], p1[2], p1[3])
   end
   function self:describe()
     return self.state .. "; edges=" .. self.edges .. " walls=" .. self.walls
   end
+  -- Temporary: a bright square at the player's feet proves whether instances draw at all,
+  -- and the lines below compare its coordinates with the chunk geometry.
+  function self:marker()
+    if not M.DEBUG or not api() then return end
+    pcall(function()
+      local p = Player.GetEntity().position
+      local floor = Player.GetEntity().coordGrid.level
+      local h = World.GetGroundHeight(floor, math.floor(p.x), math.floor(p.z))
+      self.player = string.format("player=%.0f,%.0f,%.0f ground=%s floor=%s", p.x, p.y, p.z, tostring(h), tostring(floor))
+      local m = ShapeList.GetInstance(M.NAME .. "-marker")
+      if not m then
+        m = ShapeList.CreateInstance(M.NAME .. "-marker")
+        local data = ShapeData.new()
+        data.positions = {Vector3.new(-250, 0, -250), Vector3.new(250, 0, -250), Vector3.new(250, 0, 250), Vector3.new(-250, 0, 250)}
+        data.lines = {0, 1, 1, 2, 2, 3, 3, 0}
+        m:SetShapeData(data)
+        m.colour = 0xFFFF00FF; m.lineWidth = 6; m.ignoreDepth = true
+      end
+      m.translation = Vector3.new(p.x, p.y + 40, p.z)
+      self.markerState = "marker valid=" .. tostring(m.isValid) .. " data=" .. tostring(m.hasData) .. " visible=" .. tostring(m.visible)
+    end)
+  end
+  function self:debugLines()
+    local lines = {}
+    if self.debug then lines[#lines + 1] = "Shading geometry: " .. self.debug end
+    if self.player then lines[#lines + 1] = "Shading " .. self.player end
+    if self.markerState then lines[#lines + 1] = "Shading " .. self.markerState end
+    if self.instance then
+      pcall(function()
+        local s, t = self.instance, self.instance.translation
+        lines[#lines + 1] = string.format("Shading instance valid=%s data=%s visible=%s depth=%s at=%.0f,%.0f,%.0f",
+          tostring(s.isValid), tostring(s.hasData), tostring(s.visible), tostring(s.ignoreDepth), t.x, t.y, t.z)
+      end)
+    end
+    local ok, all = pcall(function() return ShapeList.GetAllInstances() end)
+    if ok and type(all) == "table" then lines[#lines + 1] = "Shading instances: " .. #all end
+    return lines
+  end
   function self:destroy()
     self:clear("stopped")
     if self.instance then pcall(function() ShapeList.DestroyInstance(self.instance) end) end
+    pcall(function() ShapeList.DestroyInstance(M.NAME .. "-marker") end)
     self.instance = nil
   end
   return self

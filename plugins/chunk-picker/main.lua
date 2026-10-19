@@ -93,8 +93,7 @@ end
 -- The picker shows these under the key, so the probe goes there instead of the console.
 local function pickerLines()
   local lines=diagnosticLines()
-  local ok,probe=pcall(function() return require("probe").lines() end)
-  if ok then for _,line in ipairs(probe) do lines[#lines+1]=line end end
+  for _,line in ipairs(shading:debugLines()) do lines[#lines+1]=line end
   return lines
 end
 local lastDiagnostics=nil
@@ -152,7 +151,7 @@ subscribe("ServerLogic",function()
       end
     end,lines)
   end
-  shading:update(position,net.status,now)
+  shading:update(position,net.status,now); shading:marker()
   render()
 end)
 -- Draw supplies a documented elapsed time even when the Lua os library is absent.
