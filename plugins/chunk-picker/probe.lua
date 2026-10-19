@@ -32,29 +32,45 @@ local function members(value)
   return #names .. " [" .. table.concat(names, ",", 1, math.min(12, #names)) .. "]"
 end
 
-function M.lines()
-  local lines = {}
-  local function add(label, fn) lines[#lines + 1] = try(label, fn) end
-  for _, name in ipairs({"Achievement", "AchievementCategory", "Diary", "Task"}) do
-    add("Probe config." .. name, function()
-      local source = config[name]
-      if source == nil then return "nil" end
-      return type(source) .. " count=" .. count(source)
-    end)
-  end
-  add("Probe id.Achievement", function() return id.Achievement == nil and "nil" or (type(id.Achievement) .. " count=" .. count(id.Achievement)) end)
-  add("Probe first achievement", function()
-    local key, value = first(config.Achievement)
-    return tostring(key) .. " name=" .. tostring(value.name)
+local function short(value)
+  local text = type(value) == "function" and "fn" or tostring(value)
+  return (text:gsub("[%c]", " "):sub(1, 24))
+end
+
+-- Every member of one achievement with its value, several per line, plus a count of
+-- true values across all achievements for each boolean member (to find "completed").
+local function achievementLines(lines)
+  local ok, err = pcall(function()
+    local _, sample = first(config.Achievement)
+    local mt, names = getmetatable(sample), {}
+    for key in pairs(mt) do if type(key) == "string" and not key:find("^__") then names[#names + 1] = key end end
+    table.sort(names)
+    local row, booleans = {}, {}
+    for _, name in ipairs(names) do
+      local okValue, value = pcall(function() return sample[name] end)
+      row[#row + 1] = name .. "=" .. (okValue and short(value) or "err")
+      if okValue and type(value) == "boolean" then booleans[#booleans + 1] = name end
+      if #row == 4 then lines[#lines + 1] = "Ach " .. table.concat(row, " "); row = {} end
+    end
+    if #row > 0 then lines[#lines + 1] = "Ach " .. table.concat(row, " ") end
+    for _, name in ipairs(booleans) do
+      local yes, total = 0, 0
+      for _, achievement in pairs(config.Achievement) do
+        total = total + 1
+        local okValue, value = pcall(function() return achievement[name] end)
+        if okValue and value == true then yes = yes + 1 end
+      end
+      lines[#lines + 1] = "Ach true " .. name .. ": " .. yes .. "/" .. total
+    end
   end)
-  add("Probe achievement members", function() return members(select(2, first(config.Achievement))) end)
-  add("Probe quest members", function() return members(config.Quest.COOK_QUEST) end)
-  for _, name in ipairs({"BACKPACK", "INV", "INVENTORY", "WORN", "EQUIPMENT", "BANK"}) do
-    add("Probe Inv." .. name, function() return tostring(config.Inv[name]) end)
-  end
-  add("Probe VarPlayer count", function() return count(var.VarPlayer) end)
-  add("Probe VarBit", function() return var.VarBit == nil and "nil" or type(var.VarBit) end)
-  return lines
+  if not ok then lines[#lines + 1] = "Ach error " .. tostring(err):gsub("[%c]", " "):sub(1, 100) end
+end
+
+-- The achievement scan walks ~5,000 records, so run it once and reuse the lines.
+local cached
+function M.lines()
+  if not cached then cached = {}; achievementLines(cached) end
+  return cached
 end
 
 return M
