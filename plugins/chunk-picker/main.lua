@@ -85,9 +85,16 @@ local function diagnosticLines()
     lines[#lines+1]=r and ("HTTP "..i..": "..r.code.." timedOut="..tostring(r.timedOut).." failed="..tostring(r.failed).." errorInfo="..r.errorInfo)
       or ("HTTP "..i..": none")
   end
-  -- probe.lua answered the skill/quest questions on beta (2026-10-19); re-add it here when needed.
   return lines
 end
+-- The picker shows these under the key, so the probe goes there instead of the console.
+local function pickerLines()
+  local lines=diagnosticLines()
+  local ok,probe=pcall(function() return require("probe").lines() end)
+  if ok then for _,line in ipairs(probe) do lines[#lines+1]=line end end
+  return lines
+end
+local lastDiagnostics=nil
 diagnostics=require("diagnostics").new(diagnosticLines)
 local function render()
   local _,_,message=connection()
@@ -130,9 +137,14 @@ subscribe("ServerLogic",function()
   quests=net:filterQuests(quests)
   if handle and sync:due(now,skills~=nil or quests~=nil) and net:ready(now) then
     local reported=position
+    -- Diagnostics ride along at most once a minute.
+    local lines=(not lastDiagnostics or now-lastDiagnostics>=60) and pickerLines() or nil
     net:report(now,handle,key,world(),reported,skills,quests,function(ok,payload)
-      if ok then progress:ack(payload.skills,payload.quests); sync:ack(reported,now) end
-    end)
+      if ok then
+        progress:ack(payload.skills,payload.quests); sync:ack(reported,now)
+        if payload.diagnostics then lastDiagnostics=now end
+      end
+    end,lines)
   end
   render()
 end)

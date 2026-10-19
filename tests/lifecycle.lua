@@ -89,6 +89,8 @@ emit('ServerLogic'); emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic'); asse
 local req=requests[2]; assert(req.path=='/api/plugin/v1/report')
 local body=require('json').decode(req.body); assert(body.position.x==53 and body.world.beta)
 assert(body.skills.ATTACK and body.quests.finished[1]=='Mock quest')
+assert(#body.diagnostics>10 and #body.diagnostics<=80)
+for _,line in ipairs(body.diagnostics) do assert(#line<=160 and not line:find('synthetic')) end
 req.callback({responseCode=200,data='{"state":"locked","chunkId":"13613","chunkName":"Nardah"}'})
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); w=windows[#windows]
 assert(w.children[1].content:find('Nardah')); assert(w.children[2].content:find("You're in a locked chunk"))

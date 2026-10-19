@@ -30,11 +30,19 @@ local function header(request, name)
     for line in h:gmatch("[^\r\n]+") do local k,v=line:match("^([^:]+):%s*(.*)$"); if k and k:lower()==name:lower() then return v end end
   end
 end
-function M.build(seq,epoch,world,position,skills,quests)
+function M.build(seq,epoch,world,position,skills,quests,diagnostics)
   local p={v=1,seq=seq,sentAt=M.iso(epoch),position={x=position.x,z=position.z,floor=position.floor}}
   if world then p.world=world end
   p.skills=skills; p.quests=quests
+  -- Picker contract: at most 80 single lines of up to 160 characters.
+  if diagnostics and #diagnostics>0 then
+    local lines={}
+    for i=1,math.min(80,#diagnostics) do lines[i]=(tostring(diagnostics[i]):gsub("[%c]"," "):sub(1,160)) end
+    p.diagnostics=lines
+  end
   local warning
+  -- Diagnostics are the first thing dropped when a report is too large.
+  if p.diagnostics and #json.encode(p)>M.MAX_BODY then p.diagnostics=nil end
   if quests and (#quests.finished>500 or #quests.started>500) then
     p.quests=nil; warning="Quest snapshot exceeds 500 names; held locally"
   end
@@ -112,7 +120,7 @@ function M.new(options)
     return true
   end
   function self:test(now,handle,key,done) return self:requestHTTP(now,handle,key,"GET",nil,done) end
-  function self:report(now,handle,key,world,position,skills,quests,done)
+  function self:report(now,handle,key,world,position,skills,quests,done,diagnostics)
     local epoch=self:epoch(now)
     if not epoch then
       self.message="Checking picker clock"
@@ -125,7 +133,7 @@ function M.new(options)
     if not self:ready(now) then return false end
     self.sequence=math.max(self.sequence+1,math.floor(epoch*1000))
     if options.saveSequence then options.saveSequence(self.sequence) end
-    local body,payload,warning=M.build(self.sequence,epoch,world,position,skills,quests)
+    local body,payload,warning=M.build(self.sequence,epoch,world,position,skills,quests,diagnostics)
     if quests then
       self.payloadWarning=warning
       self.heldQuestJSON=not payload.quests and json.encode(quests) or nil
