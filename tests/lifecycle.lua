@@ -29,8 +29,15 @@ local function host(parent,opts,isWindow)
   function h:SetTitle(t) self.title=t end
   function h:AddText(v) return component(self,type(v)=='string' and {text=v} or v) end
   function h:AddTitle(t) return self:AddText(t) end
-  function h:AddSimpleButton(text,action) local b=component(self,{text=text}); b.action=action; return b end
-  function h:AddTextField(o) return component(self,o) end
+  function h:AddSimpleButton(text,action,o) local b=component(self,{text=text}); b.action=action; b.options=o; return b end
+  -- Tab pages share the view's children so tests can find controls the same way.
+  function h:AddTabs(tabs) self.tabs=tabs; return {GetPage=function() return self end} end
+  function h:AddColourPicker(o)
+    local p=component(self,o); p.options=o; p.value=o.value
+    function p:SetValue(v) self.value=v end
+    self.picker=p; return p
+  end
+  function h:AddTextField(o) local c=component(self,o); c.placeholder=o.placeholder; return c end
   function h:AddComboBox(o) local b=component(self,o); b.options=o; return b end
   function h:AddCheckboxButton(choices,o) self.checkboxes={choices=choices,options=o} end
   if isWindow then windows[#windows+1]=h else views[#views+1]=h end
@@ -81,7 +88,7 @@ emit('SettingsLayerReady',{component=root}); local settings=views[#views]
 local save,test,forget,key
 for _,c in ipairs(settings.children) do
   if c.content=='Save' then save=c elseif c.content=='Test connection' then test=c
-  elseif c.content=='Forget key' then forget=c elseif c.GetText and c.content=='' then key=c end
+  elseif c.content=='Forget key' then forget=c elseif c.placeholder and c.placeholder:find('key') then key=c end
 end
 assert(save and test and forget and key)
 for _,c in ipairs(settings.children) do if c.content=='home' then c.action() end end; assert(values.server=='home')
@@ -97,6 +104,7 @@ local body=require('json').decode(req.body); assert(body.position.x==53 and body
 assert(body.skills.ATTACK and body.quests.finished[1]=='Mock quest')
 assert(#body.diagnostics>10 and #body.diagnostics<=80)
 for _,line in ipairs(body.diagnostics) do assert(#line<=160 and not line:find('synthetic')) end
+local built=false; for _,line in ipairs(body.diagnostics) do if line=='Settings page: built' then built=true end end; assert(built)
 req.callback({responseCode=200,data='{"state":"locked","chunkId":"13613","chunkName":"Nardah","nearby":[{"chunkId":"13613","state":"locked"},{"chunkId":"13614","state":"unlocked"}]}'})
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); w=windows[#windows]
 assert(w.children[1].content:find('Nardah')); assert(w.children[2].content:find("You're in a locked chunk"))
@@ -110,6 +118,23 @@ settings.checkboxes.options.onChange(nil,nil,'shadeChunks',false); assert(values
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',true); assert(shape.visible)
 for _,c in ipairs(settings.children) do if c.content=='Thick' then c.action() end end
 assert(values.shadeWidth=='thick' and shapes['chunk-picker-shading-1'].lineWidth==6)
+assert(#settings.tabs==3)
+local function click(label) local hit=false
+  for _,c in ipairs(settings.children) do if c.content==label and c.action then c.action(); hit=true; break end end
+  assert(hit,label)
+end
+-- Swatch for the locked fill: switches that fill to a custom colour and redraws.
+click('Locked fill'); click('Blue'); assert(values.shadeFillLocked=='custom' and values.shadeRgbFillLocked=='#2F80FF')
+assert(settings.picker.value==0x2F80FFFF)
+-- The picker edits whichever colour is selected; leaving a preset keeps the other border colour.
+click('Rollable border'); settings.picker.options.onChange(settings.picker,0x11223344)
+assert(values.shadeColours=='custom' and values.shadeRgbRollable=='#112233' and values.shadeRgbLocked=='#FF3B30')
+-- A typed code works too; nonsense leaves everything alone.
+local field
+for _,c in ipairs(settings.children) do if c.placeholder and c.placeholder:find('Colour code') then field=c end end
+field.content='nope'; click('Use code'); assert(values.shadeRgbRollable=='#112233')
+field.content='#abcdef'; click('Use code'); assert(values.shadeRgbRollable=='#ABCDEF')
+click('Red and amber'); assert(values.shadeColours=='classic')
 -- Begin another request before revoking permission, so cancellation is observable.
 test.action(); req=requests[#requests]
 allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=false}); assert(req.cancelled)

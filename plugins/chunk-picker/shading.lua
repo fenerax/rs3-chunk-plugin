@@ -22,24 +22,35 @@ M.FILL_ALPHA = {light = 0x40, medium = 0x70, strong = 0xA8, solid = 0xE8}
 M.HAZE = 3072                -- lid height in fine units (6 tiles)
 M.FILL_STEP = 4              -- tiles between fill samples: 17x17 points per chunk
 M.FILL_LIFT = 20             -- below the border lines so they stay on top
+-- "#RRGGBB" or "RRGGBB" -> 0xRRGGBB; anything else -> nil.
+function M.hex(text)
+  local digits = type(text) == "string" and text:match("^%s*#?(%x%x%x%x%x%x)%s*$")
+  return digits and tonumber(digits, 16) or nil
+end
 function M.style(get)
   get = get or function(_, _, default) return default end
-  local colours = get("shadeColours", "String", "classic"); if not M.COLOURS[colours] then colours = "classic" end
+  local colours = get("shadeColours", "String", "classic")
+  local customLocked, customRollable = M.hex(get("shadeRgbLocked", "String", "")), M.hex(get("shadeRgbRollable", "String", ""))
+  if not (M.COLOURS[colours] or colours == "custom" and customLocked and customRollable) then colours = "classic" end
   local width = get("shadeWidth", "String", "normal"); if not M.WIDTHS[width] then width = "normal" end
   local walls = get("shadeWalls", "String", "low"); if not M.WALLS[walls] then walls = "low" end
   local grid = get("shadeGrid", "Bool", true) ~= false
-  local locked = get("shadeFillLocked", "String", "dark"); if not (M.FILLS[locked] or locked == "tint" or locked == "off") then locked = "dark" end
-  local rollable = get("shadeFillRollable", "String", "tint"); if not (rollable == "same" or rollable == "tint" or rollable == "off") then rollable = "tint" end
+  local fillLocked, fillRollable = M.hex(get("shadeRgbFillLocked", "String", "")), M.hex(get("shadeRgbFillRollable", "String", ""))
+  local locked = get("shadeFillLocked", "String", "dark")
+  if not (M.FILLS[locked] or locked == "tint" or locked == "off" or locked == "custom" and fillLocked) then locked = "dark" end
+  local rollable = get("shadeFillRollable", "String", "tint")
+  if not (rollable == "same" or rollable == "tint" or rollable == "off" or rollable == "custom" and fillRollable) then rollable = "tint" end
   local strength = get("shadeFillStrength", "String", "medium"); if not M.FILL_ALPHA[strength] then strength = "medium" end
   local shape = get("shadeFillStyle", "String", "haze"); if shape ~= "ground" then shape = "haze" end
-  local c = M.COLOURS[colours]
-  local fill = {locked = locked == "tint" and c[1] or M.FILLS[locked]}
-  fill.available = rollable == "same" and fill.locked or rollable == "tint" and c[2] or nil
+  local c = colours == "custom" and {customLocked, customRollable} or M.COLOURS[colours]
+  local fill = {locked = locked == "tint" and c[1] or locked == "custom" and fillLocked or M.FILLS[locked]}
+  fill.available = rollable == "same" and fill.locked or rollable == "tint" and c[2] or rollable == "custom" and fillRollable or nil
   return {rgb = {[2] = c[1], [1] = c[2]}, width = M.WIDTHS[width], wall = M.WALLS[walls], grid = grid,
     -- Bright tints read far heavier than dark ones (beta: amber at medium looked like a solid wall),
     -- so a rollable chunk in its own colour gets half the strength; you still want to see into it.
     fill = fill, fillAlpha = M.FILL_ALPHA[strength], tintAlpha = M.FILL_ALPHA[strength] // 2, haze = shape == "haze" and M.HAZE or 0,
-    key = table.concat({colours, width, walls, tostring(grid), locked, rollable, strength, shape}, "/")}
+    key = table.concat({colours, width, walls, tostring(grid), locked, rollable, strength, shape,
+      colours == "custom" and c[1] .. "," .. c[2] or "", locked == "custom" and fillLocked or "", rollable == "custom" and fillRollable or ""}, "/")}
 end
 local ALPHA = {line = 0xE6, grid = 0x80, wallBase = 0x70, wallTop = 0x00}
 local function rgba(rgb, alpha) return rgb * 256 + alpha end

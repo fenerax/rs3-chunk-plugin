@@ -61,7 +61,15 @@ end)
 eq(style.width,3); eq(style.wall,0); eq(style.grid,false); eq(style.rgb[2],0x2F80FF)
 g=shading.geometry(block,flat,style); validate(g); eq(#g.tris,0); eq(g.walls,0); eq(g.edges,4) -- only the boundary edges
 for i in ipairs(g.positions) do eq(g.rgba[i]>>8,0x2F80FF) end
-eq(shading.style().key,'classic/normal/low/true/dark/tint/medium/haze'); eq(shading.style().wall,shading.WALL)
+eq(shading.style().key,'classic/normal/low/true/dark/tint/medium/haze///')
+-- Custom colours: hex parsing, and a custom choice without a valid colour falls back to the default.
+eq(shading.hex('#ff3b30'),0xFF3B30); eq(shading.hex(' 2F80FF '),0x2F80FF); eq(shading.hex('#12345'),nil); eq(shading.hex(nil),nil)
+local custom=shading.style(function(key,_,default) return ({shadeColours='custom',shadeRgbLocked='#112233',shadeRgbRollable='#445566',
+  shadeFillLocked='custom',shadeRgbFillLocked='#778899',shadeFillRollable='custom',shadeRgbFillRollable='#AABBCC'})[key] or default end)
+eq(custom.rgb[2],0x112233); eq(custom.rgb[1],0x445566); eq(custom.fill.locked,0x778899); eq(custom.fill.available,0xAABBCC)
+assert(custom.key:find('1122867,4478310',1,true) and custom.key:find('7833753',1,true))
+local broken=shading.style(function(key,_,default) return ({shadeColours='custom',shadeFillLocked='custom',shadeRgbFillLocked='nope'})[key] or default end)
+eq(broken.rgb[2],0xFF3B30); eq(broken.fill.locked,0); eq(shading.style().wall,shading.WALL)
 -- Fills: locked chunks grey, rollable ones in their border colour, unlocked and unknown never.
 local fills={[NARDAH]='unlocked',[NARDAH+1]='locked',[NARDAH+2]='available',[NARDAH+3]='unknown'}
 local ground=shading.style(function(key,_,default) return ({shadeFillStyle='ground',shadeFillLocked='grey'})[key] or default end)
