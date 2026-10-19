@@ -5,9 +5,9 @@ local M = {}
 M.NAME = "chunk-picker-shading"
 M.TILE = 512                 -- fine units per tile
 M.TILES = 64                 -- tiles per map square (chunk)
-M.LIFT = 16                  -- keeps ground lines just above the terrain
+M.LIFT = 32                  -- keeps ground lines just above the terrain
 M.WALL = 320                 -- height of the translucent wall on a state boundary
-M.DEBUG = true               -- beta debugging: draw through terrain, show a marker, report coordinates
+M.DEBUG = false              -- beta debugging: draw through terrain, show a marker, report coordinates
 -- Rank decides which side of an edge colours it. Unlocked and unknown draw nothing.
 local RANK = {locked = 2, available = 1}
 local RGB = {[2] = 0xFF3B30, [1] = 0xFFB020}
@@ -225,7 +225,7 @@ function M.new(options)
         rejected = rejected + 1; shape.visible = false
       else
         shape.translation = Vector3.new(part.originX, 0, part.originZ)
-        -- While debugging on beta, draw through terrain so depth can't hide anything.
+        -- Debug builds draw through terrain; normal builds let buildings and trees hide the lines.
         shape.lineWidth = 3; shape.ignoreDepth = M.DEBUG; shape.visible = true
         drawn = drawn + 1
       end
