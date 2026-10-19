@@ -17,7 +17,8 @@ This is the real companion in `plugins/chunk-picker/`. The original
 5. With no key, check the local chunk first: Nardah should show **13613**;
    Lumbridge **12850**. The panel starts near the top centre. Drag its title
    bar, then use **- / +** at the right of the title to collapse/expand it.
-6. Run `ppr chunk-picker` and allow **httpAccess**. Open **Chunk Picker** in
+6. Run `ppe chunk-picker httpAccess` to allow web access (on beta, `ppr` showed
+   no prompt). Open **Chunk Picker** in
    the Plugin Hub's Settings layer.
 7. Choose **home** for your own picker on port **8789**, once its plugin routes
    are installed and running. **scratch** is only for an intentionally started

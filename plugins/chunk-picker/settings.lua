@@ -31,8 +31,11 @@ function M.new(store, callbacks)
       end
     end)
     section("key",function()
-      view:AddText("Personal key (visible; keep it out of screenshots)")
-      local options={text=store:get("personalKey","String",""),placeholder="Paste your personal plugin key",maxLength=256}
+      -- A masked field reads back empty, so the field is visible only while pasting; a saved key is
+      -- never put back into it, which keeps it out of later screenshots.
+      local saved=store:get("personalKey","String","")
+      view:AddText(saved~="" and ("Personal key: saved, ends "..saved:sub(-4)) or "Personal key: not saved")
+      local options={text="",placeholder=saved~="" and "Paste a new key to replace it" or "Paste your personal plugin key",maxLength=256}
       local modes=ui and ui.TextContentVisibilityMode
       if modes and modes.VISIBLE~=nil then options.visibility=modes.VISIBLE end
       key=view:AddTextField(options)
@@ -41,8 +44,10 @@ function M.new(store, callbacks)
       view:AddSimpleButton("Save",function()
         if not key then self:message("Key field unavailable; see Diagnostics"); return end
         local text=key:GetText():match("^%s*(.-)%s*$")
+        if text=="" then self:message("Paste a key first; the saved key is unchanged"); return end
         if text:find("[%c]") then self:message("Key must be one line"); return end
-        store:set("personalKey","String",text); callbacks.connectionChanged(); self:message("Key saved")
+        store:set("personalKey","String",text); pcall(function() key:SetText("",false) end)
+        callbacks.connectionChanged(); self:message("Key saved, ends "..text:sub(-4))
       end)
       view:AddSimpleButton("Test connection",function() callbacks.test(function(message) self:message(message) end) end,{inline=true})
       view:AddSimpleButton("Forget key",function()
