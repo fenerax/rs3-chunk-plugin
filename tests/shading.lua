@@ -2,7 +2,7 @@
 local shading=require('shading')
 local net=require('net')
 local json=require('json')
-local function eq(a,b) assert(a==b,tostring(a)..' ~= '..tostring(b)) end
+local function eq(a,b) if a~=b then error(tostring(a)..' ~= '..tostring(b),2) end end
 local NARDAH=53*256+45
 -- Wire rows -> map; bad rows are dropped, not fatal.
 local rows=net.nearby(json.decode('[{"chunkId":"13613","state":"unlocked"},{"chunkId":"13614","state":"locked"},'..
@@ -52,6 +52,15 @@ for _,part in ipairs(parts) do
   assert(part.originX>=51*64*512 and part.originX<=56*64*512 and part.originZ>=43*64*512 and part.originZ<=48*64*512)
 end
 eq(total,#g.positions)
+-- Styles: unknown values fall back, grid lines and walls can be turned off, colours swap.
+local style=shading.style(function(key,_,default)
+  local v=({shadeColours='colourblind',shadeWidth='nonsense',shadeWalls='off',shadeGrid=false})[key]
+  if v==nil then return default end; return v
+end)
+eq(style.width,3); eq(style.wall,0); eq(style.grid,false); eq(style.rgb[2],0x2F80FF)
+g=shading.geometry(block,flat,style); validate(g); eq(#g.tris,0); eq(g.walls,0); eq(g.edges,4) -- only the boundary edges
+for i in ipairs(g.positions) do eq(g.rgba[i]>>8,0x2F80FF) end
+eq(shading.style().key,'classic/normal/low/true'); eq(shading.style().wall,shading.WALL)
 eq(shading.signature(block,0),shading.signature(block,0)); assert(shading.signature(block,0)~=shading.signature(block,1))
 
 -- Instance lifecycle against the documented ShapeList surface.
@@ -77,8 +86,9 @@ World={IsRegion=function() return region end,GetGroundHeight=function(level,x,z)
   if level~=0 then return -1,false end
   return 1200,true
 end}
-local enabled=true
-local s=shading.new({enabled=function() return enabled end})
+local enabled,chosen=true,{}
+local s=shading.new({enabled=function() return enabled end,
+  style=function() return shading.style(function(key,_,default) return chosen[key] or default end) end})
 local pos={x=53,z=45,floor=0}
 local status={chunkId='13613',state='unlocked',nearby={[NARDAH]='unlocked',[NARDAH+1]='locked',[NARDAH-1]='locked'}}
 local function visibleCount() local n=0 for _,i in pairs(instances) do if i.visible then n=n+1 end end return n end
@@ -92,6 +102,11 @@ local calls=heightCalls
 for t=2,30 do s:update(pos,status,t) end
 eq(inst.sets,1); eq(heightCalls,calls) -- unchanged states never rebuild or resample terrain
 s:worldChanged(); s:update(pos,status,31); eq(inst.sets,1) -- complete builds ignore world updates
+-- A style change rebuilds once and applies the width; the same style again does nothing.
+chosen.shadeWidth='thick'; s:update(pos,status,31); eq(inst.sets,2); eq(inst.lineWidth,6)
+s:update(pos,status,31); eq(inst.sets,2)
+chosen.shadeWidth=nil; s:update(pos,status,31); eq(inst.sets,3); eq(inst.lineWidth,3)
+inst.sets=1
 status={chunkId='13613',state='unlocked',nearby={[NARDAH]='unlocked',[NARDAH+1]='available'}}
 s:update(pos,status,32); eq(inst.sets,2)
 -- Fewer edges now: leftover shapes from the bigger build are hidden, not left drawing.

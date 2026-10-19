@@ -1,6 +1,6 @@
 -- Typed, immediate writes: no proxy objects and no key values in diagnostics.
 local M = {}
-M.keys = {"server", "personalKey", "sendSkills", "sendQuests", "showPanel", "shadeChunks", "beta", "collapsed", "panelX", "panelY", "sequence"}
+M.keys = {"server", "personalKey", "sendSkills", "sendQuests", "showPanel", "shadeChunks", "shadeColours", "shadeWidth", "shadeWalls", "shadeGrid", "beta", "collapsed", "panelX", "panelY", "sequence"}
 function M.new(db)
   local self = {db = db, writeOK = true}
   function self:get(key, kind, default)

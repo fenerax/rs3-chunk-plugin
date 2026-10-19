@@ -1,6 +1,6 @@
 -- Draws chunk borders in the 3D world from the picker's nearby states.
--- One persistent ShapeInstance holds every line and wall, so nothing runs per frame:
--- geometry is rebuilt only when the states, floor, toggle or loaded terrain change.
+-- Small persistent ShapeInstances (one per edge) hold the lines and walls, so nothing runs per frame:
+-- geometry is rebuilt only when the states, floor, style, toggle or loaded terrain change.
 local M = {}
 M.NAME = "chunk-picker-shading"
 M.TILE = 512                 -- fine units per tile
@@ -10,7 +10,20 @@ M.WALL = 320                 -- height of the translucent wall on a state bounda
 M.DEBUG = false              -- beta debugging: draw through terrain, show a marker, report coordinates
 -- Rank decides which side of an edge colours it. Unlocked and unknown draw nothing.
 local RANK = {locked = 2, available = 1}
-local RGB = {[2] = 0xFF3B30, [1] = 0xFFB020}
+-- Player-chosen looks. Colours are {locked, available}; walls are heights in fine units.
+M.COLOURS = {classic = {0xFF3B30, 0xFFB020}, colourblind = {0x2F80FF, 0xFF9F1C}, subtle = {0xA83A32, 0xB8923E}}
+M.WIDTHS = {thin = 2, normal = 3, thick = 6}
+M.WALLS = {off = 0, low = 320, tall = 768}
+function M.style(get)
+  get = get or function(_, _, default) return default end
+  local colours = get("shadeColours", "String", "classic"); if not M.COLOURS[colours] then colours = "classic" end
+  local width = get("shadeWidth", "String", "normal"); if not M.WIDTHS[width] then width = "normal" end
+  local walls = get("shadeWalls", "String", "low"); if not M.WALLS[walls] then walls = "low" end
+  local grid = get("shadeGrid", "Bool", true) ~= false
+  local c = M.COLOURS[colours]
+  return {rgb = {[2] = c[1], [1] = c[2]}, width = M.WIDTHS[width], wall = M.WALLS[walls], grid = grid,
+    key = colours .. "/" .. width .. "/" .. walls .. "/" .. tostring(grid)}
+end
 local ALPHA = {line = 0xE6, grid = 0x80, wallBase = 0x70, wallTop = 0x00}
 local function rgba(rgb, alpha) return rgb * 256 + alpha end
 
@@ -43,7 +56,8 @@ end
 
 -- Pure geometry: returns positions as {x,y,z} triples relative to origin, plus colours and
 -- 0-based indices. height(tileX, tileZ) returns world fine height or nil when unloaded.
-function M.geometry(rows, height)
+function M.geometry(rows, height, style)
+  style = style or M.style()
   local minX, minZ
   for id in pairs(rows) do
     local x, z = id // 256, id % 256
@@ -67,9 +81,11 @@ function M.geometry(rows, height)
   end
   -- An edge runs 64 tiles from (tx,tz) along +x (dx=1) or +z (dz=1).
   local function edge(tx, tz, dx, dz, rank, boundary)
+    if not boundary and not style.grid then return end
     out.edges = out.edges + 1
     local p0, l0, t0 = #out.positions, #out.lines, #out.tris
-    local rgb = RGB[rank]
+    local rgb = style.rgb[rank]
+    local wall = boundary and style.wall > 0
     local lineColour = rgba(rgb, boundary and ALPHA.line or ALPHA.grid)
     local previous, previousBase, previousTop
     for step = 0, M.TILES do
@@ -80,13 +96,13 @@ function M.geometry(rows, height)
       else
         local line = vertex(x, z, h + M.LIFT, lineColour)
         local base, top
-        if boundary then
+        if wall then
           base = vertex(x, z, h + M.LIFT // 2, rgba(rgb, ALPHA.wallBase))
-          top = vertex(x, z, h + M.WALL, rgba(rgb, ALPHA.wallTop))
+          top = vertex(x, z, h + style.wall, rgba(rgb, ALPHA.wallTop))
         end
         if previous then
           local l = out.lines; l[#l + 1] = previous; l[#l + 1] = line
-          if boundary then
+          if wall then
             -- Both windings, so the wall shows from either side whatever the culling mode.
             local t = out.tris
             for _, v in ipairs({previousBase, base, top, previousBase, top, previousTop,
@@ -96,7 +112,7 @@ function M.geometry(rows, height)
         previous, previousBase, previousTop = line, base, top
       end
     end
-    if boundary then out.walls = out.walls + 1 end
+    if wall then out.walls = out.walls + 1 end
     if #out.lines > l0 or #out.tris > t0 then
       out.parts[#out.parts + 1] = {p0 = p0, p1 = #out.positions, l0 = l0, l1 = #out.lines, t0 = t0, t1 = #out.tris}
     end
@@ -184,26 +200,28 @@ function M.new(options)
     local rows = M.rows(status)
     if not rows then return self:clear("waiting for picker states") end
     if not api() then return self:clear("Shapes API unavailable") end
-    local signature = M.signature(rows, position.floor)
+    local style = options.style and options.style() or M.style()
+    local signature = M.signature(rows, position.floor) .. "|" .. style.key
     -- Unloaded terrain is retried after a world update (at most every two seconds), or every
     -- fifteen seconds in case that event never arrives.
     local age = now - (self.builtAt or 0)
     local retry = self.incomplete and (self.retry and age >= 2 or age >= 15)
     if signature == self.signature and not retry then return end
     self.retry = false
-    local ok, err = pcall(function() self:build(rows, position.floor, now) end)
+    local ok, err = pcall(function() self:build(rows, position.floor, now, style) end)
     self.signature = signature
     if not ok then
       self.state = "build failed: " .. tostring(err):gsub("[%c]", " "):sub(1, 80)
       hide(1)
     end
   end
-  function self:build(rows, floor, now)
+  function self:build(rows, floor, now, style)
+    style = style or M.style()
     local geometry = M.geometry(rows, function(tx, tz)
       local h, ok = World.GetGroundHeight(floor, tx * M.TILE, tz * M.TILE)
       if ok == false or type(h) ~= "number" or h < 0 then return nil end
       return h
-    end)
+    end, style)
     self.builtAt = now; self.incomplete = geometry.missing > 0
     self.edges = geometry.edges; self.walls = geometry.walls
     local parts = M.split(geometry)
@@ -226,7 +244,7 @@ function M.new(options)
       else
         shape.translation = Vector3.new(part.originX, 0, part.originZ)
         -- Debug builds draw through terrain; normal builds let buildings and trees hide the lines.
-        shape.lineWidth = 3; shape.ignoreDepth = M.DEBUG; shape.visible = true
+        shape.lineWidth = style.width; shape.ignoreDepth = M.DEBUG; shape.visible = true
         drawn = drawn + 1
       end
     end

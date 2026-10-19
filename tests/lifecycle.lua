@@ -108,6 +108,8 @@ for name,s in pairs(shapes) do if name:find('^chunk%-picker%-shading%-%d+$') and
 assert(wall) -- Nardah locked beside an unlocked chunk: a wall on their shared edge
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',false); assert(values.shadeChunks==false and not shape.visible)
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',true); assert(shape.visible)
+for _,c in ipairs(settings.children) do if c.content=='Thick' then c.action() end end
+assert(values.shadeWidth=='thick' and shapes['chunk-picker-shading-1'].lineWidth==6)
 -- Begin another request before revoking permission, so cancellation is observable.
 test.action(); req=requests[#requests]
 allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=false}); assert(req.cancelled)

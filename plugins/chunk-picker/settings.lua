@@ -65,6 +65,28 @@ function M.new(store, callbacks)
       end})
       view:AddText("Progress waits for review in the picker. Sending it never unlocks a chunk.")
     end)
+    section("shading",function()
+      view:AddTitle("Chunk borders")
+      local grid={{text="Lines between locked chunks",value="shadeGrid",selected=store:get("shadeGrid","Bool",true)}}
+      view:AddCheckboxButton(grid,{onChange=function(_,_,name,selected)
+        store:set(name,"Bool",selected); callbacks.settingChanged(name)
+      end})
+      -- Buttons rather than combo boxes, as for the server choice.
+      for _,row in ipairs({
+        {"shadeColours","Colours","classic",{{"classic","Red and amber"},{"colourblind","Blue and orange"},{"subtle","Subtle"}}},
+        {"shadeWidth","Line width","normal",{{"thin","Thin"},{"normal","Normal"},{"thick","Thick"}}},
+        {"shadeWalls","Glow walls","low",{{"off","Off"},{"low","Low"},{"tall","Tall"}}},
+      }) do
+        local key,title,default,choices=row[1],row[2],row[3],row[4]
+        local function name(value) for _,c in ipairs(choices) do if c[1]==value then return c[2] end end; return choices[1][2] end
+        local label=view:AddText(title..": "..name(store:get(key,"String",default)))
+        for i,c in ipairs(choices) do
+          view:AddSimpleButton(c[2],function()
+            store:set(key,"String",c[1]); label.content=title..": "..c[2]; callbacks.settingChanged(key)
+          end,{inline=i>1})
+        end
+      end
+    end)
   end
   return self
 end

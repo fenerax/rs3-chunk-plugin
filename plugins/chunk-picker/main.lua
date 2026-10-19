@@ -3,7 +3,9 @@ local store=require("store").new(PersistentDB)
 local location=require("location")
 local progress=require("progress").new()
 local sync=require("sync").new()
-local shading=require("shading").new({enabled=function() return store:get("shadeChunks","Bool",true) end})
+local shadingModule=require("shading")
+local shading=shadingModule.new({enabled=function() return store:get("shadeChunks","Bool",true) end,
+  style=function() return shadingModule.style(function(...) return store:get(...) end) end})
 local netModule=require("net")
 local now, alive, position, reason, playing=0,true,nil,"Waiting for login",false
 local subscriptions, warned={},{}
@@ -53,7 +55,7 @@ settings=require("settings").new(store,{
   connectionChanged=changed,
   settingChanged=function(name)
     if name=="showPanel" then panel:build()
-    elseif name=="shadeChunks" then shading:update(position,net.status,now)
+    elseif name:find("^shade") then shading:update(position,net.status,now)
     else changed() end
   end,
   test=function(done)
