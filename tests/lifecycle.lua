@@ -200,4 +200,23 @@ settingsWindow().options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logi
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()
 for _,line in ipairs(logs) do assert(not line:find('synthetic')) end
+-- Wider resize grips: PrettyUI's strips are re-placed after each of its refreshes, except mid-drag.
+do
+  local settings=require('settings')
+  local function strip() local s={}; function s:SetPos(x,y) self.x,self.y=x,y end; function s:SetSize(w,h) self.w,self.h=w,h end; return s end
+  local r={root={x=100,y=50,width=400,height=300},handles={},calls=0}
+  for _,k in ipairs({'n','s','e','w','nw','ne','sw','se'}) do r.handles[k]=strip() end
+  function r:_Refresh() self.calls=self.calls+1; for _,s in pairs(self.handles) do s:SetPos(0,0); s:SetSize(10,10) end end
+  function r:Refresh() self:_Refresh(true) end
+  assert(settings.widen(r) and r.calls==1)
+  local se,ne,west,south=r.handles.se,r.handles.ne,r.handles.w,r.handles.s
+  assert(se.x==478 and se.y==328 and se.w==36 and se.h==36)
+  assert(ne.x==494 and ne.y==36 and ne.w==20 and ne.h==20)
+  assert(west.x==86 and west.y==56 and west.w==20 and west.h==272)
+  assert(south.x==122 and south.y==344 and south.w==356 and south.h==20)
+  r.dragState={captureExpanded=true}; r:Refresh(); assert(se.w==10)
+  r.handles.e.hidden=true; r.dragState=nil; r:Refresh(); assert(r.handles.e.w==10 and se.w==36)
+  assert(not settings.widen(nil) and not settings.widen({}))
+end
 print('lifecycle tests passed')
+
