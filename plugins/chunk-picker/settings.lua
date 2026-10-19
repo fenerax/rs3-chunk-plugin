@@ -8,8 +8,17 @@ M.PALETTE = {{"Red",0xFF3B30},{"Orange",0xFF9F1C},{"Amber",0xFFB020},{"Yellow",0
 M.TARGETS = {{"lockedBorder","Locked border"},{"rollableBorder","Rollable border"},
   {"lockedFill","Locked fill"},{"rollableFill","Rollable fill"}}
 function M.hex(rgb) return string.format("#%06X", rgb) end
+-- Text drawn in a dark colour vanishes on the dark settings background; lift it towards white.
+function M.readable(rgb)
+  local r,g,b=rgb>>16&0xFF,rgb>>8&0xFF,rgb&0xFF
+  if r*299+g*587+b*114>=90000 then return rgb end
+  local function lift(c) return math.floor(c+(255-c)*0.45) end
+  return lift(r)<<16|lift(g)<<8|lift(b)
+end
+-- Size buttons in the window; the beta's PrettyUI may not offer edge resizing.
+M.SIZES = {{"Small",420,480},{"Medium",520,640},{"Large",640,820},{"Full height",560,100000}}
 -- The resizable window: smallest size, and the room its title bar and padding take from the tabs.
-M.MIN_W, M.MIN_H, M.CHROME = 360, 300, 56
+M.MIN_W, M.MIN_H, M.CHROME = 360, 300, 90
 -- options.windowed: build into our own movable, resizable window on the plugin layer instead of the
 -- hub's settings page, whose size the hub fixes.
 function M.new(store, callbacks, options)
@@ -52,7 +61,7 @@ function M.new(store, callbacks, options)
       pcall(function()
         local rgb=current(target)
         entry.text.content=entry.title..": "..(rgb and M.hex(rgb) or "off")
-        entry.text.rgba=(rgb or 0x808080)*256+0xFF
+        entry.text.rgba=M.readable(rgb or 0x808080)*256+0xFF
       end)
     end
   end
@@ -178,7 +187,7 @@ function M.new(store, callbacks, options)
     section("swatches",function()
       for i,swatch in ipairs(M.PALETTE) do
         page:AddSimpleButton(swatch[1],function() setColour(target,swatch[2]) end,
-          {inline=(i-1)%4~=0,colour=swatch[2]*256+0xFF,tooltip=M.hex(swatch[2])})
+          {inline=(i-1)%4~=0,colour=M.readable(swatch[2])*256+0xFF,tooltip=M.hex(swatch[2])})
       end
     end)
     section("hex",function()
@@ -187,7 +196,7 @@ function M.new(store, callbacks, options)
         local rgb=shading.hex(field:GetText())
         if rgb then setColour(target,rgb); pcall(function() field:SetText("",false) end)
         else self:message("Colour codes look like #FF3B30") end
-      end,{inline=true})
+      end)
     end)
   end
   -- Tabs fill the given height; each page scrolls when its controls don't fit.
@@ -236,6 +245,15 @@ function M.new(store, callbacks, options)
         -- Closing only marks it; tick() tears it down outside PrettyUI's own close handling.
         onClose=function() store:set("settingsWindow","Bool",false) end})
       self.window=window; self.view=window; self.built={x=x,y=y,w=w,h=h}
+      self.resizable=window.resize~=nil
+      section("sizes",function()
+        for i,size in ipairs(M.SIZES) do
+          -- Applied on the next tick: rebuilding inside the button's own click would destroy it mid-call.
+          window:AddSimpleButton(size[1],function()
+            store:set("settingsW","Int",size[2]); store:set("settingsH","Int",size[3]); self.resized=true
+          end,{inline=i>1,tooltip="Resize this window"})
+        end
+      end)
       fill(window,h-M.CHROME)
     end)
     -- Don't retry a window that failed to build every second; Open tries again.
@@ -246,6 +264,8 @@ function M.new(store, callbacks, options)
   function self:tick()
     if not store:get("settingsWindow","Bool",false) then if self.window then self:destroy() end; return end
     if not self.window then if not self.error then self:build() end; return end
+    if self.resized then self.resized=nil; self.window=nil; local view=self.view; self.view=nil
+      pcall(function() view:Destroy() end); self:build(); return end
     local x,y,w,h=geometry()
     if not x then self:build(); return end
     if x~=self.built.x or y~=self.built.y then

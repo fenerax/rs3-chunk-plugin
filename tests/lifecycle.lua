@@ -163,6 +163,10 @@ resized.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 assert(resized.destroyed and values.settingsWindow==false)
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(settingsWindow()==resized)
 click('Open in a bigger window'); assert(settingsWindow().options.width==700)
+-- Size buttons for PrettyUI builds without edge resizing; applied on the next tick.
+for _,c in ipairs(settingsWindow().children) do if c.content=='Large' then c.action() end end
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
+assert(values.settingsW==640 and settingsWindow().options.width==640 and settingsWindow().options.height==600)
 settingsWindow().options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 PluginShutdown(); assert(next(handlers)==nil); assert(windows[#windows].destroyed); assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()

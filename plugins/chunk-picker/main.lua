@@ -87,7 +87,8 @@ local function diagnosticLines()
     "Shading: "..shading:describe(),
     "Settings page: "..(#settings.failures==0 and "built" or table.concat(settings.failures,"; ")),
     "Settings window: "..(not settingsWindow.window and (settingsWindow.error and "failed" or "closed")
-      or #settingsWindow.failures==0 and "built" or table.concat(settingsWindow.failures,"; ")),
+      or (#settingsWindow.failures==0 and "built" or table.concat(settingsWindow.failures,"; "))
+        .."; edge resize="..tostring(settingsWindow.resizable)),
   }
   for _,key in ipairs(require("store").keys) do lines[#lines+1]="DB "..key..": "..store:present(key) end
   for i=1,5 do
