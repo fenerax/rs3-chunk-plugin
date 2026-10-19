@@ -63,7 +63,7 @@ assert(w.children[1].content:find('13613')); assert(w.children[4].content:find('
 assert(#requests==0)
 w.root:SetPos(400,75); emit('Logic'); assert(values.panelX==400 and values.panelY==75)
 w.root.children[1].action(); emit('Logic'); w=windows[#windows]
-assert(values.collapsed==true); assert(w.options.height==40); assert(w.title:find('13613'))
+assert(values.collapsed==true); assert(w.options.height==34); assert(w.title:find('13613'))
 w.root.children[1].action(); emit('Logic'); assert(values.collapsed==false)
 emit('SettingsLayerReady',{component=root}); local settings=views[#views]
 local save,test,forget,key
