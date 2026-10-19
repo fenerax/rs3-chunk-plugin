@@ -57,7 +57,7 @@ function M.new(store, callbacks)
     end)
     section("options",function()
       local choices={}
-      for _,entry in ipairs({{"sendSkills","Send my levels"},{"sendQuests","Send my quests"},{"showPanel","Show panel"},{"beta","Beta world"}}) do
+      for _,entry in ipairs({{"sendSkills","Send my levels"},{"sendQuests","Send my quests"},{"showPanel","Show panel"},{"shadeChunks","Shade locked chunks"},{"beta","Beta world"}}) do
         choices[#choices+1]={text=entry[2],value=entry[1],selected=store:get(entry[1],"Bool",true)}
       end
       view:AddCheckboxButton(choices,{onChange=function(_,_,name,selected)

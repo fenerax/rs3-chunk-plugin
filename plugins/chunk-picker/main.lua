@@ -3,6 +3,7 @@ local store=require("store").new(PersistentDB)
 local location=require("location")
 local progress=require("progress").new()
 local sync=require("sync").new()
+local shading=require("shading").new({enabled=function() return store:get("shadeChunks","Bool",true) end})
 local netModule=require("net")
 local now, alive, position, reason, playing=0,true,nil,"Waiting for login",false
 local subscriptions, warned={},{}
@@ -52,6 +53,7 @@ settings=require("settings").new(store,{
   connectionChanged=changed,
   settingChanged=function(name)
     if name=="showPanel" then panel:build()
+    elseif name=="shadeChunks" then shading:update(position,net.status,now)
     else changed() end
   end,
   test=function(done)
@@ -77,6 +79,7 @@ local function diagnosticLines()
     "World channel: id=1; beta="..tostring(store:get("beta","Bool",true)),
     "Panel: "..(panel.error or "ready").."; storage="..tostring(store.writeOK),
     "Payload: "..(net.payloadWarning or "within 16 KB"),
+    "Shading: "..shading:describe(),
     "Settings page: "..(#settings.failures==0 and "built" or table.concat(settings.failures,"; ")),
   }
   for _,key in ipairs(require("store").keys) do lines[#lines+1]="DB "..key..": "..store:present(key) end
@@ -120,10 +123,13 @@ subscribe("GameStateChanged",function(e)
   local game=state==30 or (GameState and state==GameState.GAME) or numeric==30
   if game then enterGame()
   else
-    playing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); panel:destroy()
+    playing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); panel:destroy(); shading:clear("waiting for login")
   end
 end)
 subscribe("WindowSizeChanged",function() panel:build() end)
+-- Terrain heights may load after the shading was built.
+subscribe("WorldCreated",function() shading:worldChanged() end)
+subscribe("WorldUpdated",function() shading:worldChanged() end)
 subscribe("SkillTransmit",function(e) if playing then progress:skill(e,now) end end)
 subscribe("VarTransmit",function(e) if playing then progress:var(e,now) end end)
 subscribe("ServerLogic",function()
@@ -146,6 +152,7 @@ subscribe("ServerLogic",function()
       end
     end,lines)
   end
+  shading:update(position,net.status,now)
   render()
 end)
 -- Draw supplies a documented elapsed time even when the Lua os library is absent.
@@ -167,7 +174,7 @@ function PluginShutdown()
   if not alive then return end
   alive=false
   for _,s in ipairs(subscriptions) do pcall(function() s.event.Unsubscribe(s.ref) end) end
-  subscriptions={}; net:cancel(); panel:destroy(); settings:destroy(); diagnostics:destroy()
+  subscriptions={}; net:cancel(); panel:destroy(); settings:destroy(); diagnostics:destroy(); shading:destroy()
 end
 panel:build()
 local ok,available=pcall(Player.IsAvailable)

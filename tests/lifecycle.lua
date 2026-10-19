@@ -56,7 +56,13 @@ for n,name in ipairs({'ATTACK','DEFENCE','STRENGTH','HITPOINTS','RANGED','PRAYER
 end
 QuestType={NORMAL=0}
 config={Quest={Q={id=1,type=0,name='Mock quest',hasStartedQuest=false,hasFinishedQuest=true,masterQuestVars={}}}}
-World={IsRegion=function() return false end}
+World={IsRegion=function() return false end,GetGroundHeight=function() return 1500,true end}
+local shapes={}
+Vector3={new=function(x,y,z) return {x=x,y=y,z=z} end}
+ShapeData={new=function() return {} end}
+ShapeList={GetInstance=function(n) return shapes[n] end,CreateInstance=function(n)
+  local i={isValid=true,visible=true,SetShapeData=function(self,d) self.data=d; return true end}; shapes[n]=i; return i
+end,DestroyInstance=function(i) i.isValid=false; for k,v in pairs(shapes) do if v==i then shapes[k]=nil end end; return true end}
 HTTPRequest={new=function(_,path)
   local r={path=path,AddHeader=function() end,Cancel=function(self) self.cancelled=true end,
     Get=function(self,cb) self.callback=cb end,Post=function(self,body,cb) self.body=body; self.callback=cb end}
@@ -91,11 +97,15 @@ local body=require('json').decode(req.body); assert(body.position.x==53 and body
 assert(body.skills.ATTACK and body.quests.finished[1]=='Mock quest')
 assert(#body.diagnostics>10 and #body.diagnostics<=80)
 for _,line in ipairs(body.diagnostics) do assert(#line<=160 and not line:find('synthetic')) end
-req.callback({responseCode=200,data='{"state":"locked","chunkId":"13613","chunkName":"Nardah"}'})
+req.callback({responseCode=200,data='{"state":"locked","chunkId":"13613","chunkName":"Nardah","nearby":[{"chunkId":"13613","state":"locked"},{"chunkId":"13614","state":"unlocked"}]}'})
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); w=windows[#windows]
 assert(w.children[1].content:find('Nardah')); assert(w.children[2].content:find("You're in a locked chunk"))
 assert(w.children[2].rgba==0xFF7878FF)
 emit('Draw',{timeDeltaSecs=60}); emit('ServerLogic')
+local shape=shapes['chunk-picker-shading']; assert(shape and shape.visible and #shape.data.positions>0)
+assert(#shape.data.tris>0) -- Nardah locked beside an unlocked chunk: a wall on their shared edge
+settings.checkboxes.options.onChange(nil,nil,'shadeChunks',false); assert(values.shadeChunks==false and not shape.visible)
+settings.checkboxes.options.onChange(nil,nil,'shadeChunks',true); assert(shape.visible)
 -- Begin another request before revoking permission, so cancellation is observable.
 test.action(); req=requests[#requests]
 allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=false}); assert(req.cancelled)
@@ -105,7 +115,7 @@ emit('ContentLayerReady',{component=root}); assert(views[#views].children[1].con
 local old=windows[#windows]; root=component(nil,{width=800,height=600}); emit('WindowSizeChanged'); assert(old.destroyed)
 emit('GameStateChanged',{newState=37}); assert(windows[#windows].destroyed)
 emit('GameStateChanged',{newState=30}); assert(not windows[#windows].destroyed)
-PluginShutdown(); assert(next(handlers)==nil); assert(windows[#windows].destroyed)
+PluginShutdown(); assert(next(handlers)==nil); assert(windows[#windows].destroyed); assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()
 for _,line in ipairs(logs) do assert(not line:find('synthetic')) end
 print('lifecycle tests passed')

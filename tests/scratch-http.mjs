@@ -77,7 +77,10 @@ async function serve(directory) {
 }
 
 function statusShape(body) {
-  assert.deepEqual(Object.keys(body).sort(), ['v', 'player', 'chunkId', 'chunkName', 'state', 'activeTaskCount', 'unlockedChunkCount', 'pendingProgress', 'seenAt'].sort());
+  assert.deepEqual(Object.keys(body).sort(), ['v', 'player', 'chunkId', 'chunkName', 'state', 'activeTaskCount', 'unlockedChunkCount', 'pendingProgress', 'seenAt', 'nearby'].sort());
+  assert.ok(body.nearby === null || Array.isArray(body.nearby) && body.nearby.length <= 25 && body.nearby.every(row =>
+    Object.keys(row).sort().join() === 'chunkId,state' && /^\d+$/.test(row.chunkId) && ['unlocked', 'locked', 'available', 'unknown'].includes(row.state)));
+  assert.equal(body.nearby === null, body.chunkId === null);
   assert.equal(body.v, 1);
   assert.deepEqual(body.player, { id: 'synthetic', name: 'Synthetic player' });
   assert.ok(['unlocked', 'locked', 'available', 'unknown'].includes(body.state));

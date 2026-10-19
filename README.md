@@ -41,6 +41,23 @@ This is the real companion in `plugins/chunk-picker/`. The original
     Send screenshots of the panel and Diagnostics, plus any console lines
     starting **Chunk Picker**. **Do not screenshot Settings or share your key.**
 
+### Chunk shading
+
+With **Shade locked chunks** on (the default), the plugin draws the picker's
+states on the ground around you once it has a status from the picker:
+
+- Where a locked chunk meets an unlocked or available one, a bright red line
+  follows the ground along the border, with a translucent red wall about half
+  a tile high that fades upward. Available next to unlocked is the same in amber.
+- Other edges of locked or available chunks in the 5×5 block get a fainter line,
+  so the chunk grid stays visible when everything around you is locked.
+- Unlocked and unknown chunks draw nothing. Shading is hidden in instances.
+
+It is one persistent shape (`ShapeList.CreateInstance`), rebuilt only when the
+states, your floor or the toggle change, or when terrain that was not loaded
+yet arrives. Diagnostics shows a `Shading:` line with its state and the number
+of edges and walls drawn.
+
 To reload: `prl chunk-picker`. To disable: `poff chunk-picker`. **Show panel**
 in Settings hides the overlay while syncing continues. No gameplay is automated.
 The picker only proposes observed progress for review; it never unlocks a chunk
@@ -132,7 +149,11 @@ Both routes return:
 ```
 
 `state` may be `unlocked`, `locked`, `available`, or `unknown`; `chunkId`,
-`chunkName`, and `seenAt` may be null. Other fields are currently informational.
+`chunkName`, and `seenAt` may be null. Newer pickers add `nearby`: up to 25
+`{ "chunkId", "state" }` rows for the 5×5 block of map squares around the
+reported chunk, or null. `net.lua` turns it into a map from chunk ID to state
+and drops malformed rows; shading falls back to the current chunk without it.
+Other fields are currently informational.
 Errors are `{ "message": "…" }`; the plugin does not log response bodies.
 
 Differences from the provisional brief: ISO UTC `sentAt` replaces Unix seconds/ms;

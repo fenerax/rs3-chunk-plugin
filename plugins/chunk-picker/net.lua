@@ -57,6 +57,20 @@ function M.build(seq,epoch,world,position,skills,quests,diagnostics)
   assert(#body<=M.MAX_BODY,"Report exceeds 16 KB")
   return body,p,warning
 end
+local STATES = {unlocked=true,locked=true,available=true,unknown=true}
+-- Status `nearby` rows become a map-square-id -> state map. Bad rows are dropped, never fatal:
+-- the top-level state alone still drives the panel.
+function M.nearby(rows)
+  if type(rows)~="table" then return nil end
+  local out,count={},0
+  for i=1,math.min(#rows,81) do
+    local row=rows[i]
+    local id=type(row)=="table" and type(row.chunkId)=="string" and #row.chunkId<=5 and row.chunkId:match("^%d+$")
+      and math.tointeger(tonumber(row.chunkId))
+    if id and id//256<=199 and id%256<=199 and STATES[row.state] then out[id]=row.state; count=count+1 end
+  end
+  return count>0 and out or nil
+end
 function M.new(options)
   local self={history={}, busy=false, failures=0, nextAt=0, blocked=false, localhostConnected=false,
     message="Not connected", sequence=options.sequence or 0, clockEpoch=nil, generation=0}
@@ -97,8 +111,9 @@ function M.new(options)
       local date=M.dateEpoch(header(r,"Date")); if date then self.clockEpoch=date; self.clockAt=current end
       local ok,status=pcall(json.decode,r.data or "")
       local success=code>=200 and code<300 and not r.failed and not r.timedOut and ok and type(status)=="table"
-        and ({unlocked=true,locked=true,available=true,unknown=true})[status.state]==true
+        and STATES[status.state]==true
       if success then
+        status.nearby=M.nearby(status.nearby)
         self.failures=0; self.nextAt=current+1; self.status=status; self.lastSync=current; self.message="Connected"
       elseif code==401 then self.blocked=true; self.status=nil; self.message="Key not accepted"
       else
