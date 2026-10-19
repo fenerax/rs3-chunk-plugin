@@ -102,8 +102,10 @@ emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); w=windows[#windows]
 assert(w.children[1].content:find('Nardah')); assert(w.children[2].content:find("You're in a locked chunk"))
 assert(w.children[2].rgba==0xFF7878FF)
 emit('Draw',{timeDeltaSecs=60}); emit('ServerLogic')
-local shape=shapes['chunk-picker-shading']; assert(shape and shape.visible and #shape.data.positions>0)
-assert(#shape.data.tris>0) -- Nardah locked beside an unlocked chunk: a wall on their shared edge
+local shape=shapes['chunk-picker-shading-1']; assert(shape and shape.visible and #shape.data.positions>0)
+local wall=false
+for name,s in pairs(shapes) do if name:find('^chunk%-picker%-shading%-%d+$') and s.visible and s.data.tris then wall=true end end
+assert(wall) -- Nardah locked beside an unlocked chunk: a wall on their shared edge
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',false); assert(values.shadeChunks==false and not shape.visible)
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',true); assert(shape.visible)
 -- Begin another request before revoking permission, so cancellation is observable.

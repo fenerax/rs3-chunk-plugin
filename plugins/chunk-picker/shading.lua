@@ -49,7 +49,7 @@ function M.geometry(rows, height)
     local x, z = id // 256, id % 256
     minX = math.min(minX or x, x); minZ = math.min(minZ or z, z)
   end
-  local out = {positions = {}, rgba = {}, lines = {}, tris = {}, edges = 0, walls = 0, missing = 0,
+  local out = {positions = {}, rgba = {}, lines = {}, tris = {}, parts = {}, edges = 0, walls = 0, missing = 0,
     originX = (minX or 0) * M.TILES * M.TILE, originZ = (minZ or 0) * M.TILES * M.TILE}
   if not minX then return out end
   local cache = {}
@@ -68,6 +68,7 @@ function M.geometry(rows, height)
   -- An edge runs 64 tiles from (tx,tz) along +x (dx=1) or +z (dz=1).
   local function edge(tx, tz, dx, dz, rank, boundary)
     out.edges = out.edges + 1
+    local p0, l0, t0 = #out.positions, #out.lines, #out.tris
     local rgb = RGB[rank]
     local lineColour = rgba(rgb, boundary and ALPHA.line or ALPHA.grid)
     local previous, previousBase, previousTop
@@ -96,9 +97,16 @@ function M.geometry(rows, height)
       end
     end
     if boundary then out.walls = out.walls + 1 end
+    if #out.lines > l0 or #out.tris > t0 then
+      out.parts[#out.parts + 1] = {p0 = p0, p1 = #out.positions, l0 = l0, l1 = #out.lines, t0 = t0, t1 = #out.tris}
+    end
   end
   local function rank(id) local s = rows[id]; return s and (RANK[s] or 0) or nil end
-  for id, state in pairs(rows) do
+  local ids = {}
+  for id in pairs(rows) do ids[#ids + 1] = id end
+  table.sort(ids)
+  for _, id in ipairs(ids) do
+    local state = rows[id]
     local cx, cz = id // 256, id % 256
     local own = RANK[state] or 0
     local tx, tz = cx * M.TILES, cz * M.TILES
@@ -119,6 +127,26 @@ function M.geometry(rows, height)
   return out
 end
 
+-- One shape per edge, anchored at the edge's middle vertex. On beta a single shape covering
+-- the whole 5x5 block (4,808 points) drew nothing while a 4-point square drew fine.
+function M.split(g)
+  local parts = {}
+  for _, r in ipairs(g.parts) do
+    local mid = g.positions[r.p0 + (r.p1 - r.p0) // 2 + 1]
+    local part = {positions = {}, rgba = {}, lines = {}, tris = {},
+      originX = g.originX + mid[1], originZ = g.originZ + mid[3]}
+    for i = r.p0 + 1, r.p1 do
+      local p = g.positions[i]
+      part.positions[#part.positions + 1] = {p[1] - mid[1], p[2], p[3] - mid[3]}
+      part.rgba[#part.rgba + 1] = g.rgba[i]
+    end
+    for i = r.l0 + 1, r.l1 do part.lines[#part.lines + 1] = g.lines[i] - r.p0 end
+    for i = r.t0 + 1, r.t1 do part.tris[#part.tris + 1] = g.tris[i] - r.p0 end
+    parts[#parts + 1] = part
+  end
+  return parts
+end
+
 function M.new(options)
   options = options or {}
   local self = {state = "waiting", edges = 0, walls = 0}
@@ -126,20 +154,25 @@ function M.new(options)
     return type(ShapeList) == "table" and type(ShapeData) == "table" and type(Vector3) == "table"
       and type(World) == "table" and type(World.GetGroundHeight) == "function"
   end
-  local function instance()
-    if self.instance then
-      local ok, valid = pcall(function() return self.instance.isValid end)
-      if ok and valid ~= false then return self.instance end
-      self.instance = nil
+  self.shapes = {}
+  local function instance(i)
+    local name = M.NAME .. "-" .. i
+    local current = self.shapes[i]
+    if current then
+      local ok, valid = pcall(function() return current.isValid end)
+      if ok and valid ~= false then return current end
     end
-    local ok, value = pcall(function() return ShapeList.GetInstance(M.NAME) or ShapeList.CreateInstance(M.NAME) end)
-    self.instance = ok and value or nil
-    return self.instance
+    local ok, value = pcall(function() return ShapeList.GetInstance(name) or ShapeList.CreateInstance(name) end)
+    self.shapes[i] = ok and value or nil
+    return self.shapes[i]
+  end
+  local function hide(from)
+    for i = from, #self.shapes do local s = self.shapes[i]; if s then pcall(function() s.visible = false end) end end
   end
   function self:clear(state)
     self.signature = nil; self.incomplete = false; self.edges = 0; self.walls = 0
     if state then self.state = state end
-    if self.instance then pcall(function() self.instance.visible = false end) end
+    hide(1)
   end
   function self:worldChanged() if self.incomplete then self.retry = true end end
   function self:update(position, status, now)
@@ -162,7 +195,7 @@ function M.new(options)
     self.signature = signature
     if not ok then
       self.state = "build failed: " .. tostring(err):gsub("[%c]", " "):sub(1, 80)
-      if self.instance then pcall(function() self.instance.visible = false end) end
+      hide(1)
     end
   end
   function self:build(rows, floor, now)
@@ -173,29 +206,37 @@ function M.new(options)
     end)
     self.builtAt = now; self.incomplete = geometry.missing > 0
     self.edges = geometry.edges; self.walls = geometry.walls
-    local shape = instance()
-    if not shape then self.state = "could not create shape instance"; return end
-    if #geometry.positions == 0 or (#geometry.lines == 0 and #geometry.tris == 0) then
-      shape.visible = false
+    local parts = M.split(geometry)
+    if #parts == 0 then
+      hide(1)
       self.state = geometry.missing > 0 and "terrain not loaded yet" or "nothing locked nearby"
       return
     end
-    local data = ShapeData.new()
-    local positions = {}
-    for i, p in ipairs(geometry.positions) do positions[i] = Vector3.new(p[1], p[2], p[3]) end
-    data.positions = positions; data.rgba = geometry.rgba; data.lines = geometry.lines
-    if #geometry.tris > 0 then data.tris = geometry.tris end
-    if shape:SetShapeData(data) == false then self.state = "shape data rejected"; shape.visible = false; return end
-    shape.translation = Vector3.new(geometry.originX, 0, geometry.originZ)
-    -- First beta test showed nothing; while debugging, draw through terrain so depth can't hide it.
-    shape.lineWidth = 3; shape.ignoreDepth = M.DEBUG; shape.visible = true
-    self.state = "drawn" .. (self.incomplete and " (some terrain not loaded)" or "")
-    local lo, hi
-    for _, p in ipairs(geometry.positions) do lo = math.min(lo or p[2], p[2]); hi = math.max(hi or p[2], p[2]) end
-    local p1 = geometry.positions[1]
-    self.debug = string.format("origin=%d,%d y=%s..%s n=%d lines=%d tris=%d first=%d,%d,%d",
-      geometry.originX, geometry.originZ, tostring(lo), tostring(hi), #geometry.positions, #geometry.lines // 2,
-      #geometry.tris // 3, p1[1], p1[2], p1[3])
+    local drawn, rejected = 0, 0
+    for i, part in ipairs(parts) do
+      local shape = instance(i)
+      if not shape then self.state = "could not create shape instance"; hide(i); return end
+      local data = ShapeData.new()
+      local positions = {}
+      for j, p in ipairs(part.positions) do positions[j] = Vector3.new(p[1], p[2], p[3]) end
+      data.positions = positions; data.rgba = part.rgba; data.lines = part.lines
+      if #part.tris > 0 then data.tris = part.tris end
+      if shape:SetShapeData(data) == false then
+        rejected = rejected + 1; shape.visible = false
+      else
+        shape.translation = Vector3.new(part.originX, 0, part.originZ)
+        -- While debugging on beta, draw through terrain so depth can't hide anything.
+        shape.lineWidth = 3; shape.ignoreDepth = M.DEBUG; shape.visible = true
+        drawn = drawn + 1
+      end
+    end
+    hide(#parts + 1)
+    self.parts = #parts
+    self.state = (drawn > 0 and "drawn" or "shape data rejected") .. (self.incomplete and " (some terrain not loaded)" or "")
+    local largest = 0
+    for _, part in ipairs(parts) do largest = math.max(largest, #part.positions) end
+    self.debug = string.format("parts=%d drawn=%d rejected=%d largest=%d points; first at %d,%d",
+      #parts, drawn, rejected, largest, parts[1].originX, parts[1].originZ)
   end
   function self:describe()
     return self.state .. "; edges=" .. self.edges .. " walls=" .. self.walls
@@ -227,9 +268,9 @@ function M.new(options)
     if self.debug then lines[#lines + 1] = "Shading geometry: " .. self.debug end
     if self.player then lines[#lines + 1] = "Shading " .. self.player end
     if self.markerState then lines[#lines + 1] = "Shading " .. self.markerState end
-    if self.instance then
+    if self.shapes[1] then
       pcall(function()
-        local s, t = self.instance, self.instance.translation
+        local s, t = self.shapes[1], self.shapes[1].translation
         lines[#lines + 1] = string.format("Shading instance valid=%s data=%s visible=%s depth=%s at=%.0f,%.0f,%.0f",
           tostring(s.isValid), tostring(s.hasData), tostring(s.visible), tostring(s.ignoreDepth), t.x, t.y, t.z)
       end)
@@ -240,9 +281,9 @@ function M.new(options)
   end
   function self:destroy()
     self:clear("stopped")
-    if self.instance then pcall(function() ShapeList.DestroyInstance(self.instance) end) end
+    for _, s in ipairs(self.shapes) do pcall(function() ShapeList.DestroyInstance(s) end) end
     pcall(function() ShapeList.DestroyInstance(M.NAME .. "-marker") end)
-    self.instance = nil
+    self.shapes = {}
   end
   return self
 end

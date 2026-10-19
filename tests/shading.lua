@@ -44,6 +44,14 @@ assert(g.missing>0); for _,p in ipairs(g.positions) do assert(p[2]>=500) end
 local block={}
 for dx=-2,2 do for dz=-2,2 do block[NARDAH+dx*256+dz]=(dx==0 and dz==0) and 'unlocked' or 'locked' end end
 g=shading.geometry(block,flat); validate(g); eq(g.walls,4); eq(g.edges,60); assert(#g.positions<10000)
+-- Split into one small shape per edge; together the parts keep every point.
+local parts,total=shading.split(g),0
+eq(#parts,60)
+for _,part in ipairs(parts) do
+  validate(part); assert(#part.positions>0 and #part.positions<=200); total=total+#part.positions
+  assert(part.originX>=51*64*512 and part.originX<=56*64*512 and part.originZ>=43*64*512 and part.originZ<=48*64*512)
+end
+eq(total,#g.positions)
 eq(shading.signature(block,0),shading.signature(block,0)); assert(shading.signature(block,0)~=shading.signature(block,1))
 
 -- Instance lifecycle against the documented ShapeList surface.
@@ -73,18 +81,23 @@ local enabled=true
 local s=shading.new({enabled=function() return enabled end})
 local pos={x=53,z=45,floor=0}
 local status={chunkId='13613',state='unlocked',nearby={[NARDAH]='unlocked',[NARDAH+1]='locked',[NARDAH-1]='locked'}}
+local function visibleCount() local n=0 for _,i in pairs(instances) do if i.visible then n=n+1 end end return n end
 s:update(pos,status,1)
-local inst=instances[shading.NAME]; assert(inst and inst.visible); eq(inst.sets,1); eq(inst.lineWidth,3); eq(inst.ignoreDepth,shading.DEBUG)
-eq(inst.translation.x,53*64*512); eq(inst.translation.y,0); eq(inst.translation.z,44*64*512)
+local inst=instances[shading.NAME..'-1']; assert(inst and inst.visible); eq(inst.sets,1); eq(inst.lineWidth,3); eq(inst.ignoreDepth,shading.DEBUG)
+eq(inst.translation.y,0); assert(inst.translation.x>=51*64*512 and inst.translation.z>=43*64*512)
+assert(s.parts>1); eq(visibleCount(),s.parts); assert(instances[shading.NAME..'-'..s.parts].visible)
 assert(s:describe():find('^drawn; edges=%d+ walls=2'))
+local firstParts=s.parts
 local calls=heightCalls
 for t=2,30 do s:update(pos,status,t) end
 eq(inst.sets,1); eq(heightCalls,calls) -- unchanged states never rebuild or resample terrain
 s:worldChanged(); s:update(pos,status,31); eq(inst.sets,1) -- complete builds ignore world updates
 status={chunkId='13613',state='unlocked',nearby={[NARDAH]='unlocked',[NARDAH+1]='available'}}
 s:update(pos,status,32); eq(inst.sets,2)
+-- Fewer edges now: leftover shapes from the bigger build are hidden, not left drawing.
+assert(s.parts<firstParts); eq(visibleCount(),s.parts)
 s:update({x=53,z=45,floor=1},status,33); eq(inst.sets,2) -- floor 1 has no terrain in this mock
-eq(inst.visible,false)
+eq(inst.visible,false); eq(visibleCount(),0)
 World.GetGroundHeight=function() return -1,false end
 s:update({x=53,z=45,floor=1},status,34); assert(s:describe():find('terrain not loaded'))
 World.GetGroundHeight=function(level) return level==1 and 900 or 1200,true end
@@ -96,7 +109,7 @@ region=true; s:update(pos,status,39); eq(inst.visible,false); assert(s:describe(
 region=false; s:update(pos,nil,40); eq(inst.visible,false)
 s:update(nil,status,41); eq(inst.visible,false)
 s:update(pos,status,42); assert(inst.visible)
-s:destroy(); eq(instances[shading.NAME],nil); eq(inst.isValid,false)
+s:destroy(); eq(next(instances),nil); eq(inst.isValid,false)
 -- A missing Shapes API is reported, never thrown.
 ShapeList=nil; local quiet=shading.new(); quiet:update(pos,status,1); assert(quiet:describe():find('unavailable'))
 print('shading tests passed')
