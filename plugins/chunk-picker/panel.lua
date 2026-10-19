@@ -23,8 +23,11 @@ function M.new(store, changed)
   end
   function self:ensure()
     if not self.window then return end
-    local ok,parent=pcall(function() return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP) end)
-    if not ok or parent~=self.parent then self:build() end
+    -- Rebuild only when our window has stopped working (for example after the UI layer is recreated).
+    -- Don't compare component handles: the client may return a fresh wrapper on every lookup, which
+    -- would rebuild the window every second and interrupt dragging.
+    local ok,width=pcall(function() return self.window.root.width end)
+    if not ok or type(width)~="number" then self:build() end
   end
   function self:build()
     self:destroy()

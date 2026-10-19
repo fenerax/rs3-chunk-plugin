@@ -141,11 +141,11 @@ subscribe("Draw",function(e)
 end)
 local lastRender=-1
 subscribe("Logic",function()
-  -- PrettyUI moves root in its own hooks. Persist the changed position on the next client tick.
-  panel:savePosition()
   net:tick(now)
   if panel.rebuild or math.floor(now)~=lastRender then
-    lastRender=math.floor(now); panel:ensure(); render()
+    -- PrettyUI moves root in its own hooks. Persist a changed position about once a second,
+    -- not on every client tick of a drag.
+    lastRender=math.floor(now); panel:savePosition(); panel:ensure(); render()
     if playing and store:get("showPanel","Bool",true) and not panel.window then panel:build() end
   end
 end)
