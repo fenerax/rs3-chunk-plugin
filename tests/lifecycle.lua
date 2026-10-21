@@ -1,6 +1,7 @@
 -- Exercise the entry point against a small game/PrettyUI mock; never starts a client.
 local values, handlers, logs, windows, views, requests = {}, {}, {}, {}, {}, {}
 local allowed=false
+local who='Alpha' -- the logged-in character's display name
 PersistentDB={CheckExists=function(_,k) return values[k]~=nil end,Delete=function(_,k) values[k]=nil end}
 for _,kind in ipairs({'Bool','Int','String'}) do
   PersistentDB['Get'..kind]=function(_,k) return values[k] end
@@ -53,7 +54,7 @@ local chat={}; Chat={AddMessage=function(m) chat[#chat+1]=m end}
 Plugin={urls={home={},scratch={}},HasPermission=function(p) if p==2 then return true end; assert(p==1); return allowed end}
 log=function(line) logs[#logs+1]=line end
 GameState={GAME=30}
-Player={IsAvailable=function() return true end,GetEntity=function() return {coordGrid={mapSquareX=53,mapSquareZ=45,level=0}} end,
+Player={IsAvailable=function() return true end,GetEntity=function() return {displayName=who,coordGrid={mapSquareX=53,mapSquareZ=45,level=0}} end,
   GetLevelUncapped=function(s) assert(type(s)=='number'); return 10 end,GetXPUncapped=function(s) assert(type(s)=='number'); return 1000 end}
 -- Beta shape: named numeric constants; FromID returns text the Player calls reject.
 SkillType={FromID=function(n) return 'skill'..n end}
@@ -95,6 +96,7 @@ assert(save and test and forget and key)
 for _,c in ipairs(settings.children) do if c.content=='home' then c.action() end end; assert(values.server=='home')
 for _,c in ipairs(settings.children) do if c.content=='scratch' then c.action() end end; assert(values.server=='scratch')save.action(); assert(values.personalKey==nil) -- an empty paste never clears a saved key
 key.content='synthetic'; save.action(); assert(values.personalKey=='synthetic'); assert(key.content=='')
+assert(values.keyOwner=='Alpha') -- saved on this character
 allowed=true; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
 test.action(); assert(#requests==1 and requests[1].path=='/api/plugin/v1/status')
 requests[1].callback({responseCode=200,data='{"state":"unknown"}'})
@@ -169,7 +171,7 @@ assert(codeField.content=='CP1.bnldtmho1.-.-.-.-.-')
 test.action(); req=requests[#requests]
 allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=false}); assert(req.cancelled)
 req.callback({responseCode=200,data='{"state":"unlocked","chunkId":"13613"}'})
-forget.action(); assert(values.personalKey==nil)
+forget.action(); assert(values.personalKey==nil and values.keyOwner==nil)
 emit('ContentLayerReady',{component=root}); assert(views[#views].children[1].content=='Diagnostics')
 local function panelWindow()
   for i=#windows,1,-1 do local t=windows[i].title or ''; if t=='Chunk Picker' or t:find(' · ') then return windows[i] end end
@@ -209,6 +211,7 @@ assert(not tasksWindow())
 panelWindow().root.children[2].action(); assert(values.tasksWindow==true)
 local tw=tasksWindow(); assert(tw and not tw.destroyed)
 emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic')
+assert(values.keyOwner=='Alpha') -- a key with no owner belongs to the first character that uses it
 -- Opening asks straight away, before the position report is due.
 assert(last().path=='/api/plugin/v1/tasks')
 last().callback({responseCode=200,data='{"v":1,"ready":true,"stale":false,"stateRevision":5,"chunkId":"13613","hereKnown":true,'..
@@ -236,6 +239,16 @@ emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 assert(tw.children[5].content:find('no in%-game task list'),tw.children[5].content)
 local count=#requests; emit('Draw',{timeDeltaSecs=20}); emit('ServerLogic')
 assert(#requests==count or last().path=='/api/plugin/v1/report','a refused task list waits five minutes')
+-- Another character on this PC: everything pauses until the key is moved on purpose.
+who='Bravo'; local before=#requests
+for i=1,3 do emit('Draw',{timeDeltaSecs=61}); emit('ServerLogic') end
+assert(#requests==before,'no report or task fetch for another character')
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(panelWindow().children[5].content:find('another character'),panelWindow().children[5].content)
+test.action(); assert(#requests==before)
+who=nil; click('Use key on this character'); assert(values.keyOwner=='Alpha') -- no name yet: unchanged
+emit('Draw',{timeDeltaSecs=61}); emit('ServerLogic'); assert(#requests==before)
+who='Bravo'; click('Use key on this character'); assert(values.keyOwner=='Bravo')
+emit('Draw',{timeDeltaSecs=61}); emit('ServerLogic'); assert(#requests>before,'reports resume after re-binding')
 -- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)

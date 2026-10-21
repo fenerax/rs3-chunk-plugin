@@ -1,5 +1,6 @@
 local shading = require("shading")
 local lookcode = require("lookcode")
+local identity = require("identity")
 local M = {}
 -- Swatches offered for every colour; the picker and the hex field cover anything else.
 M.PALETTE = {{"Red",0xFF3B30},{"Orange",0xFF9F1C},{"Amber",0xFFB020},{"Yellow",0xFFE14D},
@@ -172,12 +173,21 @@ function M.new(store, callbacks, options)
         if text=="" then self:message("Paste a key first; the saved key is unchanged"); return end
         if text:find("[%c]") then self:message("Key must be one line"); return end
         store:set("personalKey","String",text); pcall(function() key:SetText("",false) end)
+        -- The key belongs to the character it was saved on; see identity.lua.
+        store:set("keyOwner","String",identity.current() or "")
         callbacks.connectionChanged(); self:message("Key saved, ends "..text:sub(-4))
       end)
       page:AddSimpleButton("Test connection",function() callbacks.test(function(message) self:message(message) end) end,{inline=true})
       page:AddSimpleButton("Forget key",function()
         store:forget(); if key then key:SetText("",false) end; callbacks.connectionChanged(); self:message("Key forgotten")
       end,{inline=true})
+      -- After a name change, or to move the key to this character on purpose.
+      page:AddSimpleButton("Use key on this character",function()
+        local name=identity.current()
+        if not name then self:message("Log in to the character first"); return end
+        if store:get("personalKey","String","")=="" then self:message("Save a key first"); return end
+        store:set("keyOwner","String",name); callbacks.connectionChanged(); self:message("Key now used on this character")
+      end)
       self.result=page:AddText({text="Save your key, then test the connection.",height=48,maxLines=2})
     end)
     section("options",function()

@@ -68,6 +68,10 @@ picker on another port, add it there.
   character name or world number.
 - The key is kept in the plugin's local storage, which the game does not document
   as encrypted. **Forget key** removes it; revoke it in the picker as well.
+- That storage is shared by every character on the PC, so the key remembers the
+  character it was saved on. On any other character the plugin stops sending
+  and says so, until you click **Use key on this character** in Settings. The
+  character name stays on your PC.
 - Diagnostics show which settings are present, never their values.
   **Do not share screenshots of Settings.**
 
