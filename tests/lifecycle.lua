@@ -364,6 +364,10 @@ assert(#withAchievements(pump(400,picker))>=1,'then tries again')
 -- Turning the setting off stops them, even for a new set.
 values.sendAchievements=false; config.Achievement.C={id=13,name='Third',category=3,subCategory=-1,progress=-2}
 assert(#withAchievements(pump(700,picker))==0,'the setting turns them off')
+-- A saved opt-out that can't be read stays an opt-out.
+broken['get:sendAchievements']=true; config.Achievement.C.name='Third, renamed'
+assert(#withAchievements(pump(700,picker))==0,'an unreadable opt-out still holds')
+broken['get:sendAchievements']=nil; config.Achievement.C.name='Third'
 values.sendAchievements=true
 assert(#withAchievements(pump(120,picker))==1,'and back on')
 -- Going back to a set the picker already finished (A, B, then A again) is one part, then quiet.

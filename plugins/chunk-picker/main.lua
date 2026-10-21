@@ -56,6 +56,9 @@ local function changed()
   if playing then progress:reset(); progress:login(now) end
   achievements:resend()
 end
+-- A send switch is on when saved on or never saved. One that can't be read stays off, so a
+-- storage hiccup never overrides an opt-out.
+local function allowed(name) local ok,value=store:read(name,"Bool"); return ok and value~=false end
 local function world()
   -- The public API exposes no current-world number. ID 1 is our fixed companion channel;
   -- beta distinguishes imported/live character copies. No account/character identifier is sent.
@@ -168,10 +171,10 @@ subscribe("ServerLogic",function()
   end
   position,reason=location.read(); sync:observe(position,now); progress:tick(now); achievements:tick(now); net:tick(now)
   local handle,key=connection()
-  local skills,quests=progress:pending(now,store:get("sendSkills","Bool",true),store:get("sendQuests","Bool",true))
+  local skills,quests=progress:pending(now,allowed("sendSkills"),allowed("sendQuests"))
   quests=net:filterQuests(quests)
   -- Achievement parts travel on their own, and only to a picker that lists them in `accepts`.
-  local part=store:get("sendAchievements","Bool",true) and net:accepts("achievements") and achievements:pending(now) or nil
+  local part=allowed("sendAchievements") and net:accepts("achievements") and achievements:pending(now) or nil
   if part then skills,quests=nil,nil end
   if handle and sync:due(now,skills~=nil or quests~=nil or part~=nil) and net:ready(now) then
     local reported=position

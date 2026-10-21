@@ -4,6 +4,8 @@
 -- only schedules a full re-read. Reads at login and every ten minutes catch anything missed.
 local json = require("json")
 local M = {COMPLETE = -2, PERIOD = 600, PROMPT_DELAY = 3, PART_BYTES = 12000, MAX_PARTS = 8}
+-- The picker reads numbers as JavaScript does, so ids and categories stay safe integers.
+local MAX_SAFE = 9007199254740991
 local function get(object, key)
   local ok, value = pcall(function() return object[key] end)
   if ok then return value end
@@ -34,7 +36,7 @@ local function clean(name)
 end
 local function category(value)
   local n = type(value) == "number" and math.tointeger(value)
-  return n and n >= -1 and n or -1
+  return n and n >= -1 and n <= MAX_SAFE and n or -1
 end
 -- Rows are [id, name, category, subCategory], sorted by id; nil when the table can't be read.
 -- A field that throws makes the whole read unavailable, so a hiccup never looks like a
@@ -49,7 +51,7 @@ function M.read()
         local id, name = achievement.id, achievement.name
         id = type(id) == "number" and math.tointeger(id)
         name = type(name) == "string" and clean(name)
-        if id and id >= 0 and name and not seen[id] then
+        if id and id >= 0 and id <= MAX_SAFE and name and not seen[id] then
           seen[id] = true
           rows[#rows + 1] = json.array({id, name, category(get(achievement, "category")), category(get(achievement, "subCategory"))})
         end
@@ -78,14 +80,20 @@ function M.new()
     self.readAt, self.promptAt, self.refusedUntil, self.recent = nil, nil, nil, nil
     self.state, self.warning = "waiting for login", nil
   end
-  function self:resend() if self.parts then self.sent = 0 end end
+  -- A new connection (server, key, permission or login) starts the set again and forgets
+  -- an earlier refusal, which belonged to the previous picker or key.
+  function self:resend()
+    self.refusedUntil = nil
+    if self.parts then self.sent = 0; self.state = "read" end
+  end
   function self:readNow(now)
     self.readAt, self.promptAt = now, nil
     local rows = M.read()
     if not rows then self.state = "unavailable"; return end
-    local ids = {}
-    for i, row in ipairs(rows) do ids[i] = row[1] end
-    local snapshot = checksum(table.concat(ids, ","))
+    -- The name covers everything sent, so a corrected name or category is a new set too.
+    local encoded = {}
+    for i, row in ipairs(rows) do encoded[i] = json.encode(row) end
+    local snapshot = checksum(table.concat(encoded, "\n"))
     if snapshot == self.snapshot then return end
     local parts = M.split(rows)
     if #parts > M.MAX_PARTS then

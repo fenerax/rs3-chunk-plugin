@@ -33,6 +33,11 @@ fixture({row(-1, -2), row(5, -2, ""), row(6, -2, " \t "), {id = 7, name = "Low c
 rows = achievements.read()
 eq(#rows, 1, "only the valid row"); eq(json.encode(rows[1]), '[7,"Low category",-1,-1]', "categories clamped")
 
+-- Ids above JavaScript's safe-integer range are skipped; such categories become -1.
+fixture({row(2^53, -2), {id = 8, name = "Big category", category = 2^53, subCategory = -1, progress = -2}})
+rows = achievements.read()
+eq(#rows, 1, "unsafe id skipped"); eq(rows[1][3], -1, "unsafe category")
+
 -- Missing or broken tables read as unavailable, never as "nothing complete".
 config = {}; eq(achievements.read(), nil, "no config.Achievement")
 config = {Achievement = setmetatable({}, {__pairs = function() error("boom") end})}; eq(achievements.read(), nil, "throwing table")
@@ -94,9 +99,16 @@ t:var({var = {id = 502}}, 720); t:tick(722); eq(t:pending(722), nil, "waits for 
 t:tick(723); p = t:pending(723); eq(#p.complete, 3, "new completion read")
 assert(t:describe():find("recent vars=yes"))
 
+-- A corrected name with the same ids is a new set.
+holds(t, p, 723); list[1].name = "Renamed"; t:readNow(724)
+local renamed = t:pending(724); assert(renamed and renamed.snapshot ~= p.snapshot, "a renamed achievement makes a new snapshot")
+eq(renamed.complete[1][2], "Renamed"); holds(t, renamed, 724)
+
 -- A refusal backs off for half an hour, then starts the set again.
 t:refused(730); eq(t:pending(731), nil); eq(t:pending(2529), nil); eq(t:pending(2530).part, 1)
 assert(t:describe():find("refused"))
+-- A new connection (another picker or key) forgets the refusal.
+t:refused(2540); eq(t:pending(2541), nil); t:resend(); eq(t:pending(2541).part, 1, "resend clears a refusal")
 
 -- Multi-part sets go one part at a time.
 fixture(many); t:readNow(3000)
