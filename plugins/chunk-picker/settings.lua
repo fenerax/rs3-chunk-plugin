@@ -188,7 +188,8 @@ function M.new(store, callbacks, options)
         if not name then self:message("Log in to the character first"); return end
         if store:get("personalKey","String","")=="" then self:message("Save a key first"); return end
         local readable,owner=store:read("keyOwner","String")
-        if readable and owner==identity.PENDING then self:message("Save the key again first"); return end
+        -- An owner that can't be read might be an unfinished Save; only Save can settle that.
+        if not readable or owner==identity.PENDING then self:message("Save the key again first"); return end
         local saved=store:set("keyOwner","String",name); callbacks.connectionChanged()
         self:message(saved and "Key now used on this character" or "Couldn't save that; try again")
       end)

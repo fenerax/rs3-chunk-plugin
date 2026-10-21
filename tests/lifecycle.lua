@@ -293,6 +293,10 @@ who='Charlie'; broken['set:keyOwner']=nth(2); key.content='third'; save.action()
 assert(values.personalKey=='third' and values.keyOwner~='Charlie' and settingsLine('not tied to this character'))
 quiet(70,'the new key waits'); who='Delta'; quiet(70,'and the old owner never sends it')
 click('Use key on this character'); assert(values.keyOwner~='Delta' and settingsLine('Save the key again first'))
+-- Nor when the owner can't be read at that moment: it may be an unfinished Save.
+broken['get:keyOwner']=true; click('Use key on this character'); broken['get:keyOwner']=nil
+assert(values.keyOwner==require('identity').PENDING,'rebind over an unreadable owner'); quiet(70,'and nothing is sent once reads recover')
+local before=#requests; test.action(); assert(#requests==before)
 who='Charlie'; key.content='third'; save.action(); assert(values.keyOwner=='Charlie')
 sends('the key works once Save finishes')
 -- Closing stays closed; logging out and back in keeps it closed.
