@@ -3,7 +3,8 @@
 A RuneScape 3 plugin, written for the official [RuneScape plugin API](https://developer.runescape.com/rs/),
 that connects the game to a running [Chunk Picker for RS3](https://github.com/fenerax/chunk-picker-rs3).
 It shows which chunk you are standing in, shades locked chunks on the ground,
-lists your chunk tasks in game, and reports your levels and quests to the picker.
+lists your chunk tasks in game, and reports your levels, quests and completed
+achievements to the picker.
 
 **Status: beta.** Unreviewed plugins only run on the RuneScape beta world. This
 plugin has not been submitted to the Plugin Hub. It automates no gameplay and
@@ -25,9 +26,10 @@ RuneScape is a trademark of Jagex Ltd.
   a roll is waiting.
 - **Chunk tasks window:** **Here** lists the active tasks in your current chunk;
   **All active** lists the whole list, 12 rows a page.
-- **Progress reports:** skill levels and XP, and finished or started quests, sent
-  to the picker for review. The picker decides what to do with them; the plugin
-  never unlocks a chunk or ticks a task itself.
+- **Progress reports:** skill levels and XP, finished or started quests, and
+  completed achievements (Achievement Diaries included), sent to the picker. The
+  picker decides what to do with them; the plugin never unlocks a chunk or ticks
+  a task itself. Achievements go only to a picker that says it accepts them.
 
 ## Install (beta world)
 
@@ -63,9 +65,11 @@ picker on another port, add it there.
 
 ## Privacy
 
-- The plugin sends only your position, levels, XP and quest names, plus a few
-  diagnostic lines about what the plugin could read. It sends no account name,
-  character name or world number.
+- The plugin sends only your position, levels, XP, quest names and your
+  completed achievements (id, name and category), plus a few diagnostic lines
+  about what the plugin could read. Levels, quests and achievements each have
+  their own switch in Settings; position goes with every report. It sends no
+  account name, character name or world number.
 - The key is kept in the plugin's local storage, which the game does not document
   as encrypted. **Forget key** removes it; revoke it in the picker as well.
 - That storage is shared by every character on the PC, so the key remembers the
@@ -90,7 +94,7 @@ FENGARI_HOME=../lua-harness node tests/run.cjs
 ```
 
 `tests/run.cjs` syntax-checks every Lua file, then runs the core, progress,
-shading, tasks and event-lifecycle tests. Given a file path, it also writes the
+shading, tasks, achievements and event-lifecycle tests. Given a file path, it also writes the
 HTTP requests `net.lua` would send. `tests/scratch-http.mjs` replays those
 requests against a throwaway picker started from a local picker checkout
 (`PICKER_SOURCE`); it never attaches to a running picker.
@@ -99,7 +103,8 @@ requests against a throwaway picker started from a local picker checkout
 
 The plugin talks to the picker's plugin API v1 with a bearer key:
 
-- `POST /api/plugin/v1/report` sends position, skills and quests.
+- `POST /api/plugin/v1/report` sends position, skills and quests, and, when
+  the status lists `achievements` under `accepts`, completed achievements.
 - `GET /api/plugin/v1/status` returns the current chunk's state, nearby chunk
   states, partners and any waiting roll.
 - `GET /api/plugin/v1/tasks` returns the saved task list.
@@ -107,7 +112,12 @@ The plugin talks to the picker's plugin API v1 with a bearer key:
 The picker's `docs/plugin-api.md` is the reference. All JSON and HTTP handling
 lives in `plugins/chunk-picker/net.lua`. Requests run one at a time, back off up
 to five minutes after failures, respect `Retry-After`, and stop on a 401 until
-the settings change. Quest lists are sent whole, never split.
+the settings change. Quest lists are sent whole, never split. Completed
+achievements are read at login, a few seconds after a completion, and every ten
+minutes. They go in numbered parts of at most 12 KB, one part per report and
+nothing else in it. The picker's status says how many parts it holds, so the
+plugin starts over after a picker restart (at most once a minute) and backs off
+for half an hour if the picker refuses them.
 
 ### Notes
 

@@ -70,7 +70,8 @@ for n,name in ipairs({'ATTACK','DEFENCE','STRENGTH','HITPOINTS','RANGED','PRAYER
   SkillType[name]=n-1
 end
 QuestType={NORMAL=0}
-config={Quest={Q={id=1,type=0,name='Mock quest',hasStartedQuest=false,hasFinishedQuest=true,masterQuestVars={}}}}
+config={Quest={Q={id=1,type=0,name='Mock quest',hasStartedQuest=false,hasFinishedQuest=true,masterQuestVars={}}},
+  Achievement={A={id=11,name='Mock achievement',category=3,subCategory=-1,progress=-2},B={id=12,name='Half done',category=3,subCategory=-1,progress=500}}}
 World={IsRegion=function() return false end,GetGroundHeight=function() return 1500,true end}
 local shapes={}
 Vector3={new=function(x,y,z) return {x=x,y=y,z=z} end}
@@ -316,7 +317,85 @@ who='Delta'; broken['get:keyOwner']=nth(3); key.content='fifth'; save.action(); 
 -- The owner write may have landed; either way the key is only ever pending or Delta's.
 assert(values.personalKey=='fifth' and (values.keyOwner=='Delta' or values.keyOwner==require('identity').PENDING) and settingsLine('not tied'))
 key.content='fifth'; save.action(); assert(values.keyOwner=='Delta'); sends('and Save recovers')
-who='Charlie'
+-- Achievements go only to a picker that lists them in `accepts`, each part in its own report.
+local json=require('json')
+local function bodies(from) local out={}
+  for i=from,#requests do local b=requests[i].body; if b then out[#out+1]=json.decode(b) end end
+  return out
+end
+for _,b in ipairs(bodies(1)) do assert(b.achievements==nil,'a picker that never listed achievements got them') end
+-- Advance in 10 s steps, answering each new request with reply(body).
+local function pump(seconds,reply) local from=#requests+1
+  for _=1,math.ceil(seconds/10) do
+    advance(10)
+    for i=from,#requests do local r=requests[i]
+      if r.callback and not r.answered then r.answered=true; r.callback(reply(r.body and json.decode(r.body))) end
+    end
+  end
+  return bodies(from)
+end
+-- A fake picker that assembles parts like the real one and reports how far it got.
+-- A set it already finished is acknowledged as complete, not assembled again.
+local held,done=nil,{}
+local function picker(b)
+  local a=b and b.achievements
+  if a and done[a.snapshot] then held={snapshot=a.snapshot,received=a.parts,parts=a.parts}
+  elseif a and a.part==1 then held={snapshot=a.snapshot,received=1,parts=a.parts}
+  elseif a and held and held.snapshot==a.snapshot and held.parts==a.parts and a.part==held.received+1 then held.received=a.part end
+  if held and held.received==held.parts then done[held.snapshot]=true end
+  return {responseCode=200,data=json.encode({state='locked',chunkId='13613',accepts=json.array({'achievements'}),achievements=held})}
+end
+local function withAchievements(list) local out={} for _,b in ipairs(list) do if b.achievements then out[#out+1]=b end end return out end
+local got=withAchievements(pump(120,picker))
+assert(#got==1,'one part for a small set: '..#got)
+local a=got[1].achievements
+assert(a.part==1 and a.parts==1 and #a.complete==1 and a.complete[1][1]==11 and a.complete[1][2]=='Mock achievement')
+assert(got[1].diagnostics==nil and got[1].skills==nil and got[1].quests==nil,'a part travels alone')
+assert(#withAchievements(pump(700,picker))==0,'an unchanged set is not sent again')
+-- A picker restart forgets the set; the plugin notices from status and sends it once more.
+held,done=nil,{}; assert(#withAchievements(pump(120,picker))==1,'resent after a picker restart')
+-- A refusal backs off; a new completion waits out the back-off.
+config.Achievement.B.progress=-2
+local refuse=function(b) return b and b.achievements and {responseCode=400,data='{"message":"bad field"}'} or picker(b) end
+got={}; for _=1,70 do got=withAchievements(pump(10,refuse)); if #got>0 then break end end
+assert(#got>=1 and got[1].achievements.complete[2][1]==12,'the new completion is offered')
+assert(#withAchievements(pump(1500,picker))==0,'a refused set waits half an hour')
+assert(#withAchievements(pump(400,picker))>=1,'then tries again')
+-- Turning the setting off stops them, even for a new set.
+values.sendAchievements=false; config.Achievement.C={id=13,name='Third',category=3,subCategory=-1,progress=-2}
+assert(#withAchievements(pump(700,picker))==0,'the setting turns them off')
+-- A saved opt-out that can't be read stays an opt-out.
+broken['get:sendAchievements']=true; config.Achievement.C.name='Third, renamed'
+assert(#withAchievements(pump(700,picker))==0,'an unreadable opt-out still holds')
+broken['get:sendAchievements']=nil; config.Achievement.C.name='Third'
+values.sendAchievements=true
+assert(#withAchievements(pump(120,picker))==1,'and back on')
+-- Going back to a set the picker already finished (A, B, then A again) is one part, then quiet.
+config.Achievement.C.progress=1
+assert(#withAchievements(pump(700,picker))==1,'the earlier set is offered once')
+assert(#withAchievements(pump(700,picker))==0,'and acknowledged, not resent')
+-- Multi-part sets: parts go in order until the picker holds them all, through a 429,
+-- a picker restart mid-set and a 400 on an ordinary report.
+for i=1,700 do config.Achievement['M'..i]={id=1000+i,name='Multi part achievement number '..i,category=3,subCategory=-1,progress=-2} end
+local function parts(list) local out={} for _,b in ipairs(list) do if b.achievements then out[#out+1]=b.achievements.part end end return out end
+local busy=0
+-- The 429 has no Retry-After header, which once threw inside the reply handler.
+local slow=function(b) if b and b.achievements and busy<1 then busy=busy+1; return {responseCode=429,data='{}'} end return picker(b) end
+local sent=parts(pump(700,slow)); assert(busy==1,'one 429')
+assert(#sent>=3 and held.parts==sent[#sent] and held.received==held.parts,'every part arrives: '..table.concat(sent,','))
+for i=2,#sent do assert(sent[i]==sent[i-1] or sent[i]==sent[i-1]+1,'parts in order: '..table.concat(sent,',')) end
+local total=held.parts
+-- A new completion mid-set, then the picker restarts after part 2: the plugin starts the new set over.
+config.Achievement.M701={id=1701,name='One more',category=3,subCategory=-1,progress=-2}
+local restarted=false
+local forgetful=function(b) local r=picker(b); if not restarted and held and held.received==2 then restarted=true; held,done=nil,{} end; return r end
+sent=parts(pump(900,forgetful)); assert(restarted,'the restart happened')
+assert(held.received==held.parts and held.parts==total,'the set completes after a restart: '..table.concat(sent,','))
+-- A 400 on an ordinary report (no achievements in it) doesn't stop parts.
+config.Achievement.M702={id=1702,name='And one more',category=3,subCategory=-1,progress=-2}
+local picky=function(b) if b and not b.achievements then return {responseCode=400,data='{"message":"bad position"}'} end return picker(b) end
+pump(900,picky); assert(held.received==held.parts,'parts complete despite ordinary 400s')
+for i=1,702 do config.Achievement['M'..i]=nil end
 -- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)

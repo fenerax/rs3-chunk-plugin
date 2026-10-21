@@ -2,6 +2,7 @@
 local store=require("store").new(PersistentDB)
 local location=require("location")
 local progress=require("progress").new()
+local achievements=require("achievements").new()
 local sync=require("sync").new()
 local shadingModule=require("shading")
 local shading=shadingModule.new({enabled=function() return store:get("shadeChunks","Bool",true) end,
@@ -53,7 +54,11 @@ local function changed()
   net:reset(); sync:reset()
   -- Resend progress after reconnect/server/world changes; leave its review to the picker.
   if playing then progress:reset(); progress:login(now) end
+  achievements:resend()
 end
+-- A send switch is on when saved on or never saved. One that can't be read stays off, so a
+-- storage hiccup never overrides an opt-out.
+local function allowed(name) local ok,value=store:read(name,"Bool"); return ok and value~=false end
 local function world()
   -- The public API exposes no current-world number. ID 1 is our fixed companion channel;
   -- beta distinguishes imported/live character copies. No account/character identifier is sent.
@@ -93,6 +98,7 @@ local function diagnosticLines()
     "World channel: id=1; beta="..tostring(store:get("beta","Bool",true)),
     "Panel: "..(panel.error or "ready").."; storage="..tostring(store.writeOK),
     "Payload: "..(net.payloadWarning or "within 16 KB"),
+    "Achievements: "..achievements:describe().."; picker accepts="..tostring(net:accepts("achievements")),
     "Shading: "..shading:describe(),
     "Tasks window: "..tasksWindow:describe(),
     "Locked warning: "..warning:describe(),
@@ -133,7 +139,7 @@ local function render()
   diagnostics:refresh()
 end
 local function enterGame()
-  playing=true; changed(); panel:build()
+  playing=true; changed(); achievements:login(now); panel:build()
 end
 subscribe("SettingsLayerReady",function(e) settings:mount(e.component) end)
 subscribe("ContentLayerReady",function(e) diagnostics:mount(e.component) end)
@@ -149,7 +155,7 @@ subscribe("GameStateChanged",function(e)
   local game=state==30 or (GameState and state==GameState.GAME) or numeric==30
   if game then enterGame()
   else
-    playing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); panel:destroy(); tasksWindow:destroy(); warning:reset(); shading:clear("waiting for login")
+    playing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); achievements:reset(); panel:destroy(); tasksWindow:destroy(); warning:reset(); shading:clear("waiting for login")
   end
 end)
 subscribe("WindowSizeChanged",function() panel:build(); settingsWindow:build() end)
@@ -157,26 +163,30 @@ subscribe("WindowSizeChanged",function() panel:build(); settingsWindow:build() e
 subscribe("WorldCreated",function() shading:worldChanged() end)
 subscribe("WorldUpdated",function() shading:worldChanged() end)
 subscribe("SkillTransmit",function(e) if playing then progress:skill(e,now) end end)
-subscribe("VarTransmit",function(e) if playing then progress:var(e,now) end end)
+subscribe("VarTransmit",function(e) if playing then progress:var(e,now); achievements:var(e,now) end end)
 subscribe("ServerLogic",function()
   if not playing then
     local ok,available=pcall(Player.IsAvailable)
     if ok and available then enterGame() else return end
   end
-  position,reason=location.read(); sync:observe(position,now); progress:tick(now); net:tick(now)
+  position,reason=location.read(); sync:observe(position,now); progress:tick(now); achievements:tick(now); net:tick(now)
   local handle,key=connection()
-  local skills,quests=progress:pending(now,store:get("sendSkills","Bool",true),store:get("sendQuests","Bool",true))
+  local skills,quests=progress:pending(now,allowed("sendSkills"),allowed("sendQuests"))
   quests=net:filterQuests(quests)
-  if handle and sync:due(now,skills~=nil or quests~=nil) and net:ready(now) then
+  -- Achievement parts travel on their own, and only to a picker that lists them in `accepts`.
+  local part=allowed("sendAchievements") and net:accepts("achievements") and achievements:pending(now) or nil
+  if part then skills,quests=nil,nil end
+  if handle and sync:due(now,skills~=nil or quests~=nil or part~=nil) and net:ready(now) then
     local reported=position
-    -- Diagnostics ride along at most once a minute.
-    local lines=(not lastDiagnostics or now-lastDiagnostics>=60) and pickerLines() or nil
-    net:report(now,handle,key,world(),reported,skills,quests,function(ok,payload)
+    -- Diagnostics ride along at most once a minute, never with an achievement part.
+    local lines=not part and (not lastDiagnostics or now-lastDiagnostics>=60) and pickerLines() or nil
+    net:report(now,handle,key,world(),reported,skills,quests,function(ok,payload,status,code)
       if ok then
         progress:ack(payload.skills,payload.quests); sync:ack(reported,now)
+        if net:accepts("achievements") then achievements:sync(status,now) end
         if payload.diagnostics then lastDiagnostics=now end
-      end
-    end,lines)
+      elseif code==400 and payload and payload.achievements then achievements:refused(now) end
+    end,lines,part)
   elseif handle and tasksWindow:isOpen() and net:ready(now) and net:tasksDue(now) then
     -- "Here" follows the chunk the picker last accepted, so refresh soon after a report moves it.
     local chunk=net.status and net.status.chunkId
