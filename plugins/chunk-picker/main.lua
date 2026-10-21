@@ -7,6 +7,7 @@ local shadingModule=require("shading")
 local shading=shadingModule.new({enabled=function() return store:get("shadeChunks","Bool",true) end,
   style=function() return shadingModule.style(function(...) return store:get(...) end) end})
 local warning=require("warning").new(store)
+local identity=require("identity").new(store)
 local netModule=require("net")
 local tasksModule=require("tasks")
 local tasksWindow=tasksModule.new(store)
@@ -42,6 +43,8 @@ local function connection()
   if not permission() then return nil,nil,"Allow web access in the plugin's permissions to connect" end
   local key=store:get("personalKey","String","")
   if key=="" then return nil,nil,"Open plugin Settings, paste your personal key and Save" end
+  local paused=identity:check(key)
+  if paused then return nil,nil,paused end
   local ok,handle=pcall(function() return Plugin.urls[store:get("server","String","scratch")] end)
   if not ok or not handle then return nil,nil,"Choose a manifest server in Settings" end
   return handle,key
@@ -93,6 +96,7 @@ local function diagnosticLines()
     "Shading: "..shading:describe(),
     "Tasks window: "..tasksWindow:describe(),
     "Locked warning: "..warning:describe(),
+    "Key character: "..identity:describe(),
     "Permissions now: http="..tostring(permission("httpAccess")).." chat="..tostring(permission("chatAccess"))
       .."; chat enum="..tostring(pcall(function() assert(PluginPermissions.chatAccess~=nil) end))
       .."; changes="..(#permissionEvents==0 and "none" or table.concat(permissionEvents,",")),

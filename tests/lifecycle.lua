@@ -1,10 +1,17 @@
 -- Exercise the entry point against a small game/PrettyUI mock; never starts a client.
 local values, handlers, logs, windows, views, requests = {}, {}, {}, {}, {}, {}
 local allowed=false
-PersistentDB={CheckExists=function(_,k) return values[k]~=nil end,Delete=function(_,k) values[k]=nil end}
+local who,valid='Alpha',true -- the logged-in character's display name, and whether the entity is valid
+-- broken['get:keyOwner'] (or set:, delete:) makes that storage call throw; a function decides per call.
+local broken,lost={},{}
+local function db(op,k) local b=broken[op..':'..k]; if b==true or type(b)=='function' and b() then error('storage unavailable') end end
+-- Throws on the calls listed (1-based), counting from now.
+local function nth(...) local fails,n={},0; for _,i in ipairs({...}) do fails[i]=true end; return function() n=n+1; return fails[n] end end
+PersistentDB={CheckExists=function(_,k) db('get',k); return values[k]~=nil end,Delete=function(_,k) db('delete',k); values[k]=nil end}
 for _,kind in ipairs({'Bool','Int','String'}) do
-  PersistentDB['Get'..kind]=function(_,k) return values[k] end
-  PersistentDB['Set'..kind]=function(_,k,v) values[k]=v; return true end
+  PersistentDB['Get'..kind]=function(_,k) db('get',k); return values[k] end
+  -- lost[k]: the write reports success but stores nothing.
+  PersistentDB['Set'..kind]=function(_,k,v) db('set',k); if not lost[k] then values[k]=v end; return true end
 end
 Event=setmetatable({},{__index=function(t,k)
   local event={Subscribe=function(ref,fn) handlers[k]={ref=ref,fn=fn} end,Unsubscribe=function(ref)
@@ -53,7 +60,7 @@ local chat={}; Chat={AddMessage=function(m) chat[#chat+1]=m end}
 Plugin={urls={home={},scratch={}},HasPermission=function(p) if p==2 then return true end; assert(p==1); return allowed end}
 log=function(line) logs[#logs+1]=line end
 GameState={GAME=30}
-Player={IsAvailable=function() return true end,GetEntity=function() return {coordGrid={mapSquareX=53,mapSquareZ=45,level=0}} end,
+Player={IsAvailable=function() return true end,GetEntity=function() return {displayName=who,isValid=valid,coordGrid={mapSquareX=53,mapSquareZ=45,level=0}} end,
   GetLevelUncapped=function(s) assert(type(s)=='number'); return 10 end,GetXPUncapped=function(s) assert(type(s)=='number'); return 1000 end}
 -- Beta shape: named numeric constants; FromID returns text the Player calls reject.
 SkillType={FromID=function(n) return 'skill'..n end}
@@ -95,6 +102,7 @@ assert(save and test and forget and key)
 for _,c in ipairs(settings.children) do if c.content=='home' then c.action() end end; assert(values.server=='home')
 for _,c in ipairs(settings.children) do if c.content=='scratch' then c.action() end end; assert(values.server=='scratch')save.action(); assert(values.personalKey==nil) -- an empty paste never clears a saved key
 key.content='synthetic'; save.action(); assert(values.personalKey=='synthetic'); assert(key.content=='')
+assert(values.keyOwner=='Alpha') -- saved on this character
 allowed=true; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
 test.action(); assert(#requests==1 and requests[1].path=='/api/plugin/v1/status')
 requests[1].callback({responseCode=200,data='{"state":"unknown"}'})
@@ -169,7 +177,7 @@ assert(codeField.content=='CP1.bnldtmho1.-.-.-.-.-')
 test.action(); req=requests[#requests]
 allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=false}); assert(req.cancelled)
 req.callback({responseCode=200,data='{"state":"unlocked","chunkId":"13613"}'})
-forget.action(); assert(values.personalKey==nil)
+forget.action(); assert(values.personalKey==nil and values.keyOwner==nil)
 emit('ContentLayerReady',{component=root}); assert(views[#views].children[1].content=='Diagnostics')
 local function panelWindow()
   for i=#windows,1,-1 do local t=windows[i].title or ''; if t=='Chunk Picker' or t:find(' · ') then return windows[i] end end
@@ -209,6 +217,7 @@ assert(not tasksWindow())
 panelWindow().root.children[2].action(); assert(values.tasksWindow==true)
 local tw=tasksWindow(); assert(tw and not tw.destroyed)
 emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic')
+assert(values.keyOwner=='Alpha') -- a key with no owner belongs to the first character that uses it
 -- Opening asks straight away, before the position report is due.
 assert(last().path=='/api/plugin/v1/tasks')
 last().callback({responseCode=200,data='{"v":1,"ready":true,"stale":false,"stateRevision":5,"chunkId":"13613","hereKnown":true,'..
@@ -236,6 +245,78 @@ emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 assert(tw.children[5].content:find('no in%-game task list'),tw.children[5].content)
 local count=#requests; emit('Draw',{timeDeltaSecs=20}); emit('ServerLogic')
 assert(#requests==count or last().path=='/api/plugin/v1/report','a refused task list waits five minutes')
+-- Another character on this PC: everything pauses until the key is moved on purpose.
+-- Draw only counts deltas under 60 s, so time moves in 10 s steps.
+local function advance(seconds) for _=1,math.ceil(seconds/10) do emit('Draw',{timeDeltaSecs=10}); emit('ServerLogic') end end
+local function quiet(seconds,why) local n=#requests; advance(seconds); assert(#requests==n,why) end
+local function sends(why) local n=#requests; advance(70)
+  for _=1,3 do local r=last(); r.callback({responseCode=200,data='{"state":"locked","chunkId":"13613"}'}); advance(10) end
+  assert(#requests>n,why)
+end
+local function settingsLine(text) for _,c in ipairs(settings.children) do if (c.content or ''):find(text) then return true end end end
+advance(70); local inflight=last()
+who='Bravo'
+-- The reply to a request sent before the switch still lands, and nothing follows it.
+inflight.callback({responseCode=200,data='{"state":"locked","chunkId":"13613"}'})
+quiet(400,'no report or task fetch for another character')
+emit('Logic'); assert(panelWindow().children[5].content:find('another character'),panelWindow().children[5].content)
+local before=#requests; test.action(); assert(#requests==before)
+who=''; quiet(70,'an empty name waits'); emit('Logic'); assert(panelWindow().children[5].content:find('Waiting for your character'))
+who,valid='Alpha',false; quiet(70,'an invalid entity waits'); valid=true
+who=nil; click('Use key on this character'); assert(values.keyOwner=='Alpha') -- no name yet: unchanged
+quiet(70,'still paused')
+who='Bravo'; click('Use key on this character'); assert(values.keyOwner=='Bravo')
+sends('reports resume after re-binding')
+-- Storage that can't be read or written never lets another character through.
+broken['get:keyOwner']=true; who='Charlie'; quiet(70,'unreadable owner pauses'); assert(values.keyOwner=='Bravo')
+broken['get:keyOwner']=nil; quiet(70,"still Bravo's key")
+values.keyOwner=nil; broken['set:keyOwner']=true; quiet(70,'an unbound key whose binding fails to save pauses')
+assert(values.keyOwner==nil); broken['set:keyOwner']=nil
+sends('the binding saves on a later try'); assert(values.keyOwner=='Charlie')
+-- A Forget that can't delete the key keeps its owner, says so, and the key stays bound.
+broken['delete:personalKey']=true; forget.action()
+assert(values.personalKey=='synthetic' and values.keyOwner=='Charlie' and settingsLine("Couldn't remove the key"))
+broken['delete:personalKey']=nil; who='Delta'; quiet(70,'a key that survived Forget stays with its owner')
+-- A key read that works once and then fails can't skip the owner check.
+for _=1,4 do broken['get:personalKey']=nth(3,4); local n=#requests; test.action(); assert(#requests==n,"flaky key read sent Charlie's key as Delta") end
+broken['get:personalKey']=nil
+-- A Save that stops partway never leaves a key with the wrong character.
+broken['set:keyOwner']=true; key.content='second'; save.action()
+assert(values.personalKey=='synthetic' and values.keyOwner=='Charlie' and settingsLine("Couldn't save the key"))
+broken['set:keyOwner']=nil; quiet(70,"the old key is still Charlie's")
+broken['set:personalKey']=true; key.content='second'; save.action(); broken['set:personalKey']=nil
+assert(values.personalKey=='synthetic' and values.keyOwner~='Delta' and settingsLine("Couldn't save the key"))
+quiet(70,'Delta never gets the old key'); who='Charlie'; quiet(70,'nor does Charlie while the save is unfinished')
+emit('Logic'); assert(panelWindow().children[5].content:find('save the key again'),panelWindow().children[5].content)
+who='Delta'; key.content='second'; save.action(); assert(values.personalKey=='second' and values.keyOwner=='Delta')
+sends('a repeated Save works')
+who='Charlie'; broken['set:keyOwner']=nth(2); key.content='third'; save.action(); broken['set:keyOwner']=nil
+assert(values.personalKey=='third' and values.keyOwner~='Charlie' and settingsLine('not tied to this character'))
+quiet(70,'the new key waits'); who='Delta'; quiet(70,'and the old owner never sends it')
+click('Use key on this character'); assert(values.keyOwner~='Delta' and settingsLine('Save the key again first'))
+-- Nor when the owner can't be read at that moment: it may be an unfinished Save.
+broken['get:keyOwner']=true; click('Use key on this character'); broken['get:keyOwner']=nil
+assert(values.keyOwner==require('identity').PENDING,'rebind over an unreadable owner'); quiet(70,'and nothing is sent once reads recover')
+local before=#requests; test.action(); assert(#requests==before)
+who='Charlie'; key.content='third'; save.action(); assert(values.keyOwner=='Charlie')
+sends('the key works once Save finishes')
+-- Writes that claim success but don't stick, and read-backs that fail, are caught too.
+lost.personalKey=true; key.content='fourth'; save.action(); lost.personalKey=nil
+assert(values.personalKey=='third' and values.keyOwner~='Charlie' and settingsLine("Couldn't save the key"))
+quiet(70,'a key write that did not stick pauses')
+key.content='fourth'; save.action(); assert(values.personalKey=='fourth' and values.keyOwner=='Charlie'); sends('recovered')
+lost.keyOwner=true; who='Delta'; key.content='fifth'; save.action(); lost.keyOwner=nil
+assert(values.personalKey=='fourth' and values.keyOwner=='Charlie' and settingsLine("Couldn't save the key"))
+quiet(70,"Delta never gets Charlie's key")
+-- The key's read-back fails (each read is CheckExists then Get).
+broken['get:personalKey']=nth(1,2); key.content='fifth'; save.action(); broken['get:personalKey']=nil
+assert(values.keyOwner~='Delta' and values.keyOwner~='Charlie' and settingsLine("Couldn't save the key"))
+quiet(70,'a failed key read-back pauses Delta'); who='Charlie'; quiet(70,'and Charlie')
+who='Delta'; broken['get:keyOwner']=nth(3); key.content='fifth'; save.action(); broken['get:keyOwner']=nil
+-- The owner write may have landed; either way the key is only ever pending or Delta's.
+assert(values.personalKey=='fifth' and (values.keyOwner=='Delta' or values.keyOwner==require('identity').PENDING) and settingsLine('not tied'))
+key.content='fifth'; save.action(); assert(values.keyOwner=='Delta'); sends('and Save recovers')
+who='Charlie'
 -- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)

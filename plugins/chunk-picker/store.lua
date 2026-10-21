@@ -1,6 +1,6 @@
 -- Typed, immediate writes: no proxy objects and no key values in diagnostics.
 local M = {}
-M.keys = {"server", "personalKey", "sendSkills", "sendQuests", "showPanel", "showPartner", "warnLocked", "warnRoll", "warnChat", "shadeChunks", "shadeColours", "shadeWidth", "shadeWalls", "shadeGrid", "shadeFillLocked", "shadeFillRollable", "shadeFillStrength", "shadeFillStyle", "shadePartner", "shadeRgbPartner", "shadeRgbLocked", "shadeRgbRollable", "shadeRgbFillLocked", "shadeRgbFillRollable", "beta", "collapsed", "panelX", "panelY", "settingsWindow", "settingsX", "settingsY", "settingsW", "settingsH", "tasksWindow", "tasksView", "tasksX", "tasksY", "sequence"}
+M.keys = {"server", "personalKey", "keyOwner", "sendSkills", "sendQuests", "showPanel", "showPartner", "warnLocked", "warnRoll", "warnChat", "shadeChunks", "shadeColours", "shadeWidth", "shadeWalls", "shadeGrid", "shadeFillLocked", "shadeFillRollable", "shadeFillStrength", "shadeFillStyle", "shadePartner", "shadeRgbPartner", "shadeRgbLocked", "shadeRgbRollable", "shadeRgbFillLocked", "shadeRgbFillRollable", "beta", "collapsed", "panelX", "panelY", "settingsWindow", "settingsX", "settingsY", "settingsW", "settingsH", "tasksWindow", "tasksView", "tasksX", "tasksY", "sequence"}
 function M.new(db)
   local self = {db = db, writeOK = true}
   function self:get(key, kind, default)
@@ -16,7 +16,23 @@ function M.new(db)
     self.writeOK = ok and saved ~= false
     return self.writeOK
   end
-  function self:forget() pcall(function() self.db:Delete("personalKey") end) end
+  -- Like get, but tells an absent key (true, nil) from an unreadable one (false).
+  function self:read(key, kind)
+    local ok, value = pcall(function()
+      if not self.db:CheckExists(key) then return nil end
+      return self.db["Get" .. kind](self.db, key)
+    end)
+    return ok, value
+  end
+  -- The owner goes only once the key is confirmed gone, so a failed delete can't leave an
+  -- unbound key behind for the next character to pick up.
+  function self:forget()
+    pcall(function() self.db:Delete("personalKey") end)
+    local ok, exists = pcall(function() return self.db:CheckExists("personalKey") end)
+    if not ok or exists then return false end
+    pcall(function() self.db:Delete("keyOwner") end)
+    return true
+  end
   function self:present(key)
     local ok, exists = pcall(function() return self.db:CheckExists(key) end)
     return ok and exists and "set" or "not set"
