@@ -70,7 +70,8 @@ for n,name in ipairs({'ATTACK','DEFENCE','STRENGTH','HITPOINTS','RANGED','PRAYER
   SkillType[name]=n-1
 end
 QuestType={NORMAL=0}
-config={Quest={Q={id=1,type=0,name='Mock quest',hasStartedQuest=false,hasFinishedQuest=true,masterQuestVars={}}}}
+config={Quest={Q={id=1,type=0,name='Mock quest',hasStartedQuest=false,hasFinishedQuest=true,masterQuestVars={}}},
+  Achievement={A={id=11,name='Mock achievement',category=3,subCategory=-1,progress=-2},B={id=12,name='Half done',category=3,subCategory=-1,progress=500}}}
 World={IsRegion=function() return false end,GetGroundHeight=function() return 1500,true end}
 local shapes={}
 Vector3={new=function(x,y,z) return {x=x,y=y,z=z} end}
@@ -316,8 +317,52 @@ who='Delta'; broken['get:keyOwner']=nth(3); key.content='fifth'; save.action(); 
 -- The owner write may have landed; either way the key is only ever pending or Delta's.
 assert(values.personalKey=='fifth' and (values.keyOwner=='Delta' or values.keyOwner==require('identity').PENDING) and settingsLine('not tied'))
 key.content='fifth'; save.action(); assert(values.keyOwner=='Delta'); sends('and Save recovers')
-who='Charlie'
--- Closing stays closed; logging out and back in keeps it closed.
+-- Achievements go only to a picker that lists them in `accepts`, each part in its own report.
+local json=require('json')
+local function bodies(from) local out={}
+  for i=from,#requests do local b=requests[i].body; if b then out[#out+1]=json.decode(b) end end
+  return out
+end
+for _,b in ipairs(bodies(1)) do assert(b.achievements==nil,'a picker that never listed achievements got them') end
+-- Advance in 10 s steps, answering each new request with reply(body).
+local function pump(seconds,reply) local from=#requests+1
+  for _=1,math.ceil(seconds/10) do
+    advance(10)
+    for i=from,#requests do local r=requests[i]
+      if r.callback and not r.answered then r.answered=true; r.callback(reply(r.body and json.decode(r.body))) end
+    end
+  end
+  return bodies(from)
+end
+-- A fake picker that assembles parts like the real one and reports how far it got.
+local held
+local function picker(b)
+  local a=b and b.achievements
+  if a and a.part==1 then held={snapshot=a.snapshot,received=1,parts=a.parts}
+  elseif a and held and held.snapshot==a.snapshot and held.parts==a.parts and a.part==held.received+1 then held.received=a.part end
+  return {responseCode=200,data=json.encode({state='locked',chunkId='13613',accepts=json.array({'achievements'}),achievements=held})}
+end
+local function withAchievements(list) local out={} for _,b in ipairs(list) do if b.achievements then out[#out+1]=b end end return out end
+local got=withAchievements(pump(120,picker))
+assert(#got==1,'one part for a small set: '..#got)
+local a=got[1].achievements
+assert(a.part==1 and a.parts==1 and #a.complete==1 and a.complete[1][1]==11 and a.complete[1][2]=='Mock achievement')
+assert(got[1].diagnostics==nil and got[1].skills==nil and got[1].quests==nil,'a part travels alone')
+assert(#withAchievements(pump(700,picker))==0,'an unchanged set is not sent again')
+-- A picker restart forgets the set; the plugin notices from status and sends it once more.
+held=nil; assert(#withAchievements(pump(120,picker))==1,'resent after a picker restart')
+-- A refusal backs off; a new completion waits out the back-off.
+config.Achievement.B.progress=-2
+local refuse=function(b) return b and b.achievements and {responseCode=400,data='{"message":"bad field"}'} or picker(b) end
+got={}; for _=1,70 do got=withAchievements(pump(10,refuse)); if #got>0 then break end end
+assert(#got>=1 and got[1].achievements.complete[2][1]==12,'the new completion is offered')
+assert(#withAchievements(pump(1500,picker))==0,'a refused set waits half an hour')
+assert(#withAchievements(pump(400,picker))>=1,'then tries again')
+-- Turning the setting off stops them, even for a new set.
+values.sendAchievements=false; config.Achievement.C={id=13,name='Third',category=3,subCategory=-1,progress=-2}
+assert(#withAchievements(pump(700,picker))==0,'the setting turns them off')
+values.sendAchievements=true
+assert(#withAchievements(pump(120,picker))==1,'and back on')-- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()

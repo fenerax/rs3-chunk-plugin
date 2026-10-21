@@ -31,10 +31,10 @@ local function header(request, name)
     for line in h:gmatch("[^\r\n]+") do local k,v=line:match("^([^:]+):%s*(.*)$"); if k and k:lower()==name:lower() then return v end end
   end
 end
-function M.build(seq,epoch,world,position,skills,quests,diagnostics)
+function M.build(seq,epoch,world,position,skills,quests,diagnostics,achievements)
   local p={v=1,seq=seq,sentAt=M.iso(epoch),position={x=position.x,z=position.z,floor=position.floor}}
   if world then p.world=world end
-  p.skills=skills; p.quests=quests
+  p.skills=skills; p.quests=quests; p.achievements=achievements
   -- Picker contract: at most 80 single lines of up to 160 characters.
   if diagnostics and #diagnostics>0 then
     local lines={}
@@ -98,6 +98,13 @@ function M.new(options)
     return quests
   end
   function self:ready(now) return not self.busy and not self.blocked and now>=self.nextAt end
+  -- Optional report fields the picker has said it understands; it refuses unknown ones.
+  function self:accepts(name)
+    local list=self.status and self.status.accepts
+    if type(list)~="table" then return false end
+    for _,value in ipairs(list) do if value==name then return true end end
+    return false
+  end
   function self:requestHTTP(now,handle,key,method,body,done,path)
     if not self:ready(now) then return false end
     self.busy=true; self.startedAt=now; local generation=self.generation
@@ -157,7 +164,7 @@ function M.new(options)
     if not self:tasksDue(now) then return false end
     return self:requestHTTP(now,handle,key,"GET",nil,done,M.TASKS)
   end
-  function self:report(now,handle,key,world,position,skills,quests,done,diagnostics)
+  function self:report(now,handle,key,world,position,skills,quests,done,diagnostics,achievements)
     local epoch=self:epoch(now)
     if not epoch then
       self.message="Checking picker clock"
@@ -170,7 +177,7 @@ function M.new(options)
     if not self:ready(now) then return false end
     self.sequence=math.max(self.sequence+1,math.floor(epoch*1000))
     if options.saveSequence then options.saveSequence(self.sequence) end
-    local body,payload,warning=M.build(self.sequence,epoch,world,position,skills,quests,diagnostics)
+    local body,payload,warning=M.build(self.sequence,epoch,world,position,skills,quests,diagnostics,achievements)
     if quests then
       self.payloadWarning=warning
       self.heldQuestJSON=not payload.quests and json.encode(quests) or nil
