@@ -172,10 +172,10 @@ function M.new(store, callbacks, options)
         local text=key:GetText():match("^%s*(.-)%s*$")
         if text=="" then self:message("Paste a key first; the saved key is unchanged"); return end
         if text:find("[%c]") then self:message("Key must be one line"); return end
-        store:set("personalKey","String",text); pcall(function() key:SetText("",false) end)
         -- The key belongs to the character it was saved on; see identity.lua.
-        store:set("keyOwner","String",identity.current() or "")
-        callbacks.connectionChanged(); self:message("Key saved, ends "..text:sub(-4))
+        local failed=identity.save(store,text); callbacks.connectionChanged()
+        if failed then self:message(failed); return end
+        pcall(function() key:SetText("",false) end); self:message("Key saved, ends "..text:sub(-4))
       end)
       page:AddSimpleButton("Test connection",function() callbacks.test(function(message) self:message(message) end) end,{inline=true})
       page:AddSimpleButton("Forget key",function()
@@ -187,6 +187,8 @@ function M.new(store, callbacks, options)
         local name=identity.current()
         if not name then self:message("Log in to the character first"); return end
         if store:get("personalKey","String","")=="" then self:message("Save a key first"); return end
+        local readable,owner=store:read("keyOwner","String")
+        if readable and owner==identity.PENDING then self:message("Save the key again first"); return end
         local saved=store:set("keyOwner","String",name); callbacks.connectionChanged()
         self:message(saved and "Key now used on this character" or "Couldn't save that; try again")
       end)

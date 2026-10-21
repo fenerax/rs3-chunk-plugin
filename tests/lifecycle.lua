@@ -2,9 +2,11 @@
 local values, handlers, logs, windows, views, requests = {}, {}, {}, {}, {}, {}
 local allowed=false
 local who,valid='Alpha',true -- the logged-in character's display name, and whether the entity is valid
--- broken['get:keyOwner'] (or set:, delete:) makes that storage call throw.
+-- broken['get:keyOwner'] (or set:, delete:) makes that storage call throw; a function decides per call.
 local broken={}
-local function db(op,k) if broken[op..':'..k] then error('storage unavailable') end end
+local function db(op,k) local b=broken[op..':'..k]; if b==true or type(b)=='function' and b() then error('storage unavailable') end end
+-- Throws on the calls listed (1-based), counting from now.
+local function nth(...) local fails,n={},0; for _,i in ipairs({...}) do fails[i]=true end; return function() n=n+1; return fails[n] end end
 PersistentDB={CheckExists=function(_,k) db('get',k); return values[k]~=nil end,Delete=function(_,k) db('delete',k); values[k]=nil end}
 for _,kind in ipairs({'Bool','Int','String'}) do
   PersistentDB['Get'..kind]=function(_,k) db('get',k); return values[k] end
@@ -274,7 +276,26 @@ sends('the binding saves on a later try'); assert(values.keyOwner=='Charlie')
 broken['delete:personalKey']=true; forget.action()
 assert(values.personalKey=='synthetic' and values.keyOwner=='Charlie' and settingsLine("Couldn't remove the key"))
 broken['delete:personalKey']=nil; who='Delta'; quiet(70,'a key that survived Forget stays with its owner')
-who='Charlie'-- Closing stays closed; logging out and back in keeps it closed.
+-- A key read that works once and then fails can't skip the owner check.
+for _=1,4 do broken['get:personalKey']=nth(3,4); local n=#requests; test.action(); assert(#requests==n,"flaky key read sent Charlie's key as Delta") end
+broken['get:personalKey']=nil
+-- A Save that stops partway never leaves a key with the wrong character.
+broken['set:keyOwner']=true; key.content='second'; save.action()
+assert(values.personalKey=='synthetic' and values.keyOwner=='Charlie' and settingsLine("Couldn't save the key"))
+broken['set:keyOwner']=nil; quiet(70,"the old key is still Charlie's")
+broken['set:personalKey']=true; key.content='second'; save.action(); broken['set:personalKey']=nil
+assert(values.personalKey=='synthetic' and values.keyOwner~='Delta' and settingsLine("Couldn't save the key"))
+quiet(70,'Delta never gets the old key'); who='Charlie'; quiet(70,'nor does Charlie while the save is unfinished')
+emit('Logic'); assert(panelWindow().children[5].content:find('save the key again'),panelWindow().children[5].content)
+who='Delta'; key.content='second'; save.action(); assert(values.personalKey=='second' and values.keyOwner=='Delta')
+sends('a repeated Save works')
+who='Charlie'; broken['set:keyOwner']=nth(2); key.content='third'; save.action(); broken['set:keyOwner']=nil
+assert(values.personalKey=='third' and values.keyOwner~='Charlie' and settingsLine('not tied to this character'))
+quiet(70,'the new key waits'); who='Delta'; quiet(70,'and the old owner never sends it')
+click('Use key on this character'); assert(values.keyOwner~='Delta' and settingsLine('Save the key again first'))
+who='Charlie'; key.content='third'; save.action(); assert(values.keyOwner=='Charlie')
+sends('the key works once Save finishes')
+-- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()

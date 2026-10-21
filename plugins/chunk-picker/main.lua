@@ -43,7 +43,7 @@ local function connection()
   if not permission() then return nil,nil,"Allow web access in the plugin's permissions to connect" end
   local key=store:get("personalKey","String","")
   if key=="" then return nil,nil,"Open plugin Settings, paste your personal key and Save" end
-  local paused=identity:check()
+  local paused=identity:check(key)
   if paused then return nil,nil,paused end
   local ok,handle=pcall(function() return Plugin.urls[store:get("server","String","scratch")] end)
   if not ok or not handle then return nil,nil,"Choose a manifest server in Settings" end
