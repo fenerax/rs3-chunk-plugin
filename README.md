@@ -36,8 +36,19 @@ RuneScape is a trademark of Jagex Ltd.
 2. Join the beta world and open the console with Alt + the key under Esc.
 3. Run `plugins_setpath <path to this repo>\plugins`.
 4. Run `prf`, then `pon chunk-picker`.
-5. Allow web access for the plugin in the Plugin Hub's Manage tab, or with
-   `ppe chunk-picker httpAccess`.
+5. Allow web access. The beta currently has a known issue with permission
+   changes, so use the console and run these one at a time:
+
+   ```text
+   prl chunk-picker
+   ppr chunk-picker
+   ppe chunk-picker httpAccess
+   prl chunk-picker
+   ```
+
+   `ppr` may show nothing; run it anyway. Grants may need repeating after the
+   client restarts. **Diagnostics** shows `http=true` once it worked. For chatbox
+   notices, do the same with `chatAccess`.
 6. In the picker, open **More → Game plugin** and create a plugin key. In the
    game, open **Chunk Picker** in the Plugin Hub's Settings, paste the key, choose
    the server (**home** is a picker on `127.0.0.1:8789`) and click **Save**, then
