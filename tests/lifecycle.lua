@@ -374,6 +374,28 @@ assert(#withAchievements(pump(120,picker))==1,'and back on')
 config.Achievement.C.progress=1
 assert(#withAchievements(pump(700,picker))==1,'the earlier set is offered once')
 assert(#withAchievements(pump(700,picker))==0,'and acknowledged, not resent')
+-- Multi-part sets: parts go in order until the picker holds them all, through a 429,
+-- a picker restart mid-set and a 400 on an ordinary report.
+for i=1,700 do config.Achievement['M'..i]={id=1000+i,name='Multi part achievement number '..i,category=3,subCategory=-1,progress=-2} end
+local function parts(list) local out={} for _,b in ipairs(list) do if b.achievements then out[#out+1]=b.achievements.part end end return out end
+local busy=0
+-- The 429 has no Retry-After header, which once threw inside the reply handler.
+local slow=function(b) if b and b.achievements and busy<1 then busy=busy+1; return {responseCode=429,data='{}'} end return picker(b) end
+local sent=parts(pump(700,slow)); assert(busy==1,'one 429')
+assert(#sent>=3 and held.parts==sent[#sent] and held.received==held.parts,'every part arrives: '..table.concat(sent,','))
+for i=2,#sent do assert(sent[i]==sent[i-1] or sent[i]==sent[i-1]+1,'parts in order: '..table.concat(sent,',')) end
+local total=held.parts
+-- A new completion mid-set, then the picker restarts after part 2: the plugin starts the new set over.
+config.Achievement.M701={id=1701,name='One more',category=3,subCategory=-1,progress=-2}
+local restarted=false
+local forgetful=function(b) local r=picker(b); if not restarted and held and held.received==2 then restarted=true; held,done=nil,{} end; return r end
+sent=parts(pump(900,forgetful)); assert(restarted,'the restart happened')
+assert(held.received==held.parts and held.parts==total,'the set completes after a restart: '..table.concat(sent,','))
+-- A 400 on an ordinary report (no achievements in it) doesn't stop parts.
+config.Achievement.M702={id=1702,name='And one more',category=3,subCategory=-1,progress=-2}
+local picky=function(b) if b and not b.achievements then return {responseCode=400,data='{"message":"bad position"}'} end return picker(b) end
+pump(900,picky); assert(held.received==held.parts,'parts complete despite ordinary 400s')
+for i=1,702 do config.Achievement['M'..i]=nil end
 -- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)

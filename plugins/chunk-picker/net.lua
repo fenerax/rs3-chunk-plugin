@@ -30,6 +30,8 @@ local function header(request, name)
   if type(h)=="string" then
     for line in h:gmatch("[^\r\n]+") do local k,v=line:match("^([^:]+):%s*(.*)$"); if k and k:lower()==name:lower() then return v end end
   end
+  -- An explicit nil: tonumber() with no argument at all throws.
+  return nil
 end
 function M.build(seq,epoch,world,position,skills,quests,diagnostics,achievements)
   local p={v=1,seq=seq,sentAt=M.iso(epoch),position={x=position.x,z=position.z,floor=position.floor}}
