@@ -40,6 +40,10 @@ This is the real companion in `plugins/chunk-picker/`. The original
     print the same lines; this button logs text, it does not access the clipboard.
     Send screenshots of the panel and Diagnostics, plus any console lines
     starting **Chunk Picker**. **Do not screenshot Settings or share your key.**
+12. Open your tasks in the picker once, then click **Tasks** on the panel. Check
+    **Here** in Nardah, walk into the next chunk and watch it change within a few
+    seconds, switch to **All active** and page with **More** / **Back**. Drag the
+    window, close it, reload, and check it stays closed and reopens where it was.
 
 ### Chunk shading
 
@@ -57,6 +61,26 @@ It is one persistent shape (`ShapeList.CreateInstance`), rebuilt only when the
 states, your floor or the toggle change, or when terrain that was not loaded
 yet arrives. Diagnostics shows a `Shading:` line with its state and the number
 of edges and walls drawn.
+
+### Tasks window
+
+**Tasks** on the panel's title bar opens a separate **Chunk tasks** window with
+your own active tasks, in the picker's Active Tasks order:
+
+- **Here** lists the active tasks in the chunk you are standing in.
+- **All active** lists your whole active list (the first 100; the header shows
+  the true total). **Back** / **More** page through 12 rows at a time.
+
+The list is the one the picker last saved for you; the plugin never asks the
+picker to calculate tasks. If the header says **No saved task list yet**, open
+your tasks in the picker once. After you tick a task or unlock a chunk, the
+header adds **saved before your last change** until the picker shows your
+tasks again: ticked tasks already drop out, new chunks' tasks are not there yet.
+The window refreshes every 15 seconds while open, and sooner (at most every 3
+seconds) when you walk into another chunk. Closing it stops the requests. Its
+position and view are remembered. A picker without this route shows **this
+picker has no in-game task list** and checks again after five minutes; location
+sync is unaffected.
 
 To reload: `prl chunk-picker`. To disable: `poff chunk-picker`. **Show panel**
 in Settings hides the overlay while syncing continues. No gameplay is automated.
@@ -156,6 +180,12 @@ and drops malformed rows; shading falls back to the current chunk without it.
 Other fields are currently informational.
 Errors are `{ "message": "…" }`; the plugin does not log response bodies.
 
+The Tasks window uses `GET /api/plugin/v1/tasks` (no body or query, same key).
+It returns `{ v, ready, stale, stateRevision, chunkId, hereKnown, here, all,
+hereCount, allCount }`, where rows are `{ id, label, category, level? }`; see
+the picker's `docs/plugin-api.md`. Task reads never block or slow reports: they
+keep their own retry timer, and a 401/404 only disables the window.
+
 Differences from the provisional brief: ISO UTC `sentAt` replaces Unix seconds/ms;
 `world` is `{id,beta}` rather than `"beta"`; response keys are `chunkId`,
 `activeTaskCount`, `unlockedChunkCount`, and `pendingProgress`. Quest objects
@@ -180,7 +210,9 @@ node C:/Users/User/Projects/rs3-chunk-plugin/tests/scratch-http.mjs C:/Users/Use
 The first command syntax-checks **every Lua file**, runs JSON/location/instance,
 payload/backoff, progress and mocked UI/event lifecycle tests, then exports real
 `net.lua` requests. Fengari is Lua 5.3; the game uses 5.4.8. The second command
-requires the plugsync worktree. It checks port 8950 is free, starts one picker
+needs a picker checkout with the plugin routes: `PICKER_SOURCE` (default: the
+`plugin-port` worktree under `.local/claude-tools`); `SCRATCH_HTTP_PORT` picks
+another free port. It checks the port is free, starts one picker
 with bundled/synthetic inputs and a fresh isolated save/master/key, tests those
 exported requests, and stops the child. It never attaches to a running picker.
 Scratch data stays outside every repo. No live endpoints or game client are used.

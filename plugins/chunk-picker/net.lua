@@ -1,6 +1,7 @@
--- All wire-format policy lives here. Aligned to plugsync/docs/plugin-api.md (2026-10-19).
+-- All wire-format policy lives here. Aligned to the picker's docs/plugin-api.md (move/plugsync, 2026-10-21).
 local json = require("json")
-local M = {REPORT = "/api/plugin/v1/report", STATUS = "/api/plugin/v1/status", MAX_BODY = 16384}
+local taskList = require("tasks").list
+local M = {REPORT = "/api/plugin/v1/report", STATUS = "/api/plugin/v1/status", TASKS = "/api/plugin/v1/tasks", MAX_BODY = 16384}
 local months = {Jan=1,Feb=2,Mar=3,Apr=4,May=5,Jun=6,Jul=7,Aug=8,Sep=9,Oct=10,Nov=11,Dec=12}
 -- Gregorian conversions also work when the client omits os/date/utf8.
 local function days(y,m,d)
@@ -90,13 +91,14 @@ function M.new(options)
     self:cancel(); self.blocked=false; self.nextAt=0; self.failures=0; self.status=nil; self.lastSync=nil
     self.message="Not connected"
     self.heldQuestJSON=nil; self.payloadWarning=nil
+    self.tasks=nil; self.tasksNextAt=0; self.tasksMessage=nil
   end
   function self:filterQuests(quests)
     if quests and self.heldQuestJSON==json.encode(quests) then return nil end
     return quests
   end
   function self:ready(now) return not self.busy and not self.blocked and now>=self.nextAt end
-  function self:requestHTTP(now,handle,key,method,body,done)
+  function self:requestHTTP(now,handle,key,method,body,done,path)
     if not self:ready(now) then return false end
     self.busy=true; self.startedAt=now; local generation=self.generation
     local function complete(r)
@@ -113,6 +115,18 @@ function M.new(options)
       if code>0 then self.localhostConnected=true end
       local date=M.dateEpoch(header(r,"Date")); if date then self.clockEpoch=date; self.clockAt=current end
       local ok,status=pcall(json.decode,r.data or "")
+      if path==M.TASKS then
+        -- Task lists have their own retry clock and never change the connection state: an older
+        -- picker without this route answers 401, which must not block reports.
+        local list=ok and code>=200 and code<300 and not r.failed and not r.timedOut and taskList(status) or nil
+        if list then self.tasks=list; self.tasksAt=current; self.tasksMessage=nil
+        elseif code==401 or code==404 then self.tasksMessage="this picker has no in-game task list"; self.tasksNextAt=current+300
+        elseif code==429 then self.tasksMessage="picker asked to slow down"; self.tasksNextAt=current+(tonumber(header(r,"Retry-After")) or 60)
+        else self.tasksMessage="task list unavailable, retrying"; self.tasksNextAt=current+30 end
+        self.nextAt=math.max(self.nextAt,current+1)
+        if done then done(list~=nil,list,code) end
+        return
+      end
       local success=code>=200 and code<300 and not r.failed and not r.timedOut and ok and type(status)=="table"
         and STATES[status.state]==true
       if success then
@@ -130,7 +144,7 @@ function M.new(options)
       if done then done(success,status,code) end
     end
     local ok=pcall(function()
-      local r=HTTPRequest.new(handle,method=="GET" and M.STATUS or M.REPORT); self.request=r
+      local r=HTTPRequest.new(handle,path or (method=="GET" and M.STATUS or M.REPORT)); self.request=r
       r:AddHeader("Authorization","Bearer "..key); r:AddHeader("Content-Type","application/json")
       if method=="GET" then r:Get(complete) else r:Post(body,complete) end
     end)
@@ -138,6 +152,11 @@ function M.new(options)
     return true
   end
   function self:test(now,handle,key,done) return self:requestHTTP(now,handle,key,"GET",nil,done) end
+  function self:tasksDue(now) return now>=(self.tasksNextAt or 0) end
+  function self:fetchTasks(now,handle,key,done)
+    if not self:tasksDue(now) then return false end
+    return self:requestHTTP(now,handle,key,"GET",nil,done,M.TASKS)
+  end
   function self:report(now,handle,key,world,position,skills,quests,done,diagnostics)
     local epoch=self:epoch(now)
     if not epoch then

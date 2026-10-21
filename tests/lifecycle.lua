@@ -201,6 +201,43 @@ for _,c in ipairs(settingsWindow().children) do if c.content=='Large' then c.act
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 assert(values.settingsW==640 and settingsWindow().options.width==640 and settingsWindow().options.height==600)
 settingsWindow().options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
+-- Tasks: the panel's Tasks button opens a window that reads the picker's saved list.
+allowed=true; values.personalKey='synthetic'; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
+local function tasksWindow() for i=#windows,1,-1 do if (windows[i].title or ''):find('^Chunk tasks') then return windows[i] end end end
+local function last() return requests[#requests] end
+assert(not tasksWindow())
+panelWindow().root.children[2].action(); assert(values.tasksWindow==true)
+local tw=tasksWindow(); assert(tw and not tw.destroyed)
+emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic')
+-- Opening asks straight away, before the position report is due.
+assert(last().path=='/api/plugin/v1/tasks')
+last().callback({responseCode=200,data='{"v":1,"ready":true,"stale":false,"stateRevision":5,"chunkId":"13613","hereKnown":true,'..
+  '"here":[{"id":"a","label":"Mine copper","category":"Skills","level":5}],'..
+  '"all":[{"id":"a","label":"Mine copper","category":"Skills","level":5},{"id":"b","label":"Visit Nardah","category":"Extra"}],"hereCount":1,"allCount":2}'})
+-- The report that follows changes the picker's chunk, which asks for the list again.
+emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic')
+assert(last().path=='/api/plugin/v1/report'); last().callback({responseCode=200,data='{"state":"locked","chunkId":"13613","chunkName":"Nardah"}'})
+emit('Draw',{timeDeltaSecs=3.1}); emit('ServerLogic'); assert(last().path=='/api/plugin/v1/tasks')
+last().callback({responseCode=200,data='{"v":1,"ready":true,"stale":false,"stateRevision":5,"chunkId":"13613","hereKnown":true,'..
+  '"here":[{"id":"a","label":"Mine copper","category":"Skills","level":5}],'..
+  '"all":[{"id":"a","label":"Mine copper","category":"Skills","level":5},{"id":"b","label":"Visit Nardah","category":"Extra"}],"hereCount":1,"allCount":2}'})
+local reports=#requests
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); tw=tasksWindow()
+assert(tw.title=='Chunk tasks: here' and tw.children[5].content=='Here: 1 task',tw.children[5].content)
+assert(tw.children[6].content=='Skills · Mine copper (5)' and tw.children[7].content=='')
+tw.children[2].action(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
+assert(tw.title=='Chunk tasks: all active' and values.tasksView=='all' and tw.children[7].content=='Extra · Visit Nardah')
+-- No new request inside the refresh interval; a picker without the route never blocks reports.
+emit('ServerLogic'); assert(#requests==reports)
+emit('Draw',{timeDeltaSecs=16}); emit('ServerLogic')
+if last().path=='/api/plugin/v1/report' then last().callback({responseCode=200,data='{"state":"locked","chunkId":"13613"}'}); emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic') end
+assert(last().path=='/api/plugin/v1/tasks'); last().callback({responseCode=401,data='{"message":"no"}'})
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
+assert(tw.children[5].content:find('no in%-game task list'),tw.children[5].content)
+local count=#requests; emit('Draw',{timeDeltaSecs=20}); emit('ServerLogic')
+assert(#requests==count or last().path=='/api/plugin/v1/report','a refused task list waits five minutes')
+-- Closing stays closed; logging out and back in keeps it closed.
+tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()
 for _,line in ipairs(logs) do assert(not line:find('synthetic')) end

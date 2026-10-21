@@ -8,6 +8,10 @@ local shading=shadingModule.new({enabled=function() return store:get("shadeChunk
   style=function() return shadingModule.style(function(...) return store:get(...) end) end})
 local warning=require("warning").new(store)
 local netModule=require("net")
+local tasksModule=require("tasks")
+local tasksWindow=tasksModule.new(store)
+-- When the task list was last asked for, and for which reported chunk.
+local tasksAt,tasksChunk=-1000,nil
 local now, alive, position, reason, playing=0,true,nil,"Waiting for login",false
 local subscriptions, warned={},{}
 local net=netModule.new({sequence=store:get("sequence","Int",0),now=function() return now end,
@@ -52,7 +56,7 @@ local function world()
   -- beta distinguishes imported/live character copies. No account/character identifier is sent.
   return {id=1,beta=store:get("beta","Bool",true)}
 end
-panel=require("panel").new(store,function() end)
+panel=require("panel").new(store,function() end,function() tasksWindow:open() end)
 local settingsCallbacks={
   connectionChanged=changed,
   openWindow=function() settingsWindow:open() end,
@@ -87,6 +91,7 @@ local function diagnosticLines()
     "Panel: "..(panel.error or "ready").."; storage="..tostring(store.writeOK),
     "Payload: "..(net.payloadWarning or "within 16 KB"),
     "Shading: "..shading:describe(),
+    "Tasks window: "..tasksWindow:describe(),
     "Locked warning: "..warning:describe(),
     "Permissions now: http="..tostring(permission("httpAccess")).." chat="..tostring(permission("chatAccess"))
       .."; chat enum="..tostring(pcall(function() assert(PluginPermissions.chatAccess~=nil) end))
@@ -120,6 +125,7 @@ local function render()
   if net.payloadWarning then text=net.payloadWarning end
   local ok=pcall(function() panel:render(position,reason,status,text) end)
   if not ok then panel:destroy(); panel:build() end
+  tasksWindow:render(not message and net.tasks or nil,message or net.tasksMessage)
   diagnostics:refresh()
 end
 local function enterGame()
@@ -139,7 +145,7 @@ subscribe("GameStateChanged",function(e)
   local game=state==30 or (GameState and state==GameState.GAME) or numeric==30
   if game then enterGame()
   else
-    playing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); panel:destroy(); warning:reset(); shading:clear("waiting for login")
+    playing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); panel:destroy(); tasksWindow:destroy(); warning:reset(); shading:clear("waiting for login")
   end
 end)
 subscribe("WindowSizeChanged",function() panel:build(); settingsWindow:build() end)
@@ -167,6 +173,13 @@ subscribe("ServerLogic",function()
         if payload.diagnostics then lastDiagnostics=now end
       end
     end,lines)
+  elseif handle and tasksWindow:isOpen() and net:ready(now) and net:tasksDue(now) then
+    -- "Here" follows the chunk the picker last accepted, so refresh soon after a report moves it.
+    local chunk=net.status and net.status.chunkId
+    if tasksWindow.wanted or now-tasksAt>=tasksModule.REFRESH or (chunk~=tasksChunk and now-tasksAt>=tasksModule.MIN_GAP) then
+      tasksWindow.wanted=nil; tasksAt=now; tasksChunk=chunk
+      net:fetchTasks(now,handle,key,function() render() end)
+    end
   end
   shading:update(position,net.status,now); shading:marker()
   local status=net.status
@@ -185,7 +198,9 @@ subscribe("Logic",function()
   if panel.rebuild or math.floor(now)~=lastRender then
     -- PrettyUI moves root in its own hooks. Persist a changed position about once a second,
     -- not on every client tick of a drag.
-    lastRender=math.floor(now); panel:savePosition(); panel:ensure(); settingsWindow:tick(); render()
+    lastRender=math.floor(now); panel:savePosition(); panel:ensure(); settingsWindow:tick()
+    if playing then tasksWindow:tick() end
+    render()
     if playing and store:get("showPanel","Bool",true) and not panel.window then panel:build() end
   end
 end)
@@ -193,7 +208,7 @@ function PluginShutdown()
   if not alive then return end
   alive=false
   for _,s in ipairs(subscriptions) do pcall(function() s.event.Unsubscribe(s.ref) end) end
-  subscriptions={}; net:cancel(); panel:destroy(); warning:destroy(); settings:destroy(); settingsWindow:destroy(); diagnostics:destroy(); shading:destroy()
+  subscriptions={}; net:cancel(); panel:destroy(); tasksWindow:destroy(); warning:destroy(); settings:destroy(); settingsWindow:destroy(); diagnostics:destroy(); shading:destroy()
 end
 panel:build(); settingsWindow:build()
 local ok,available=pcall(Player.IsAvailable)

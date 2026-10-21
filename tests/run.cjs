@@ -24,7 +24,7 @@ function syntax(dir) {
 }
 syntax(path.join(root,'plugins')); syntax(__dirname);
 console.log(`Fengari syntax: ${count} Lua files passed`);
-for (const file of ['core.lua','progress.lua','shading.lua','lifecycle.lua']) {
+for (const file of ['core.lua','progress.lua','shading.lua','tasks.lua','lifecycle.lua']) {
   const L=state();
   if(lauxlib.luaL_dofile(L,to_luastring(path.join(__dirname,file)))) throw Error(`${file}: ${to_jsstring(lua.lua_tostring(L,-1))}`);
   lua.lua_close(L);
@@ -32,7 +32,7 @@ for (const file of ['core.lua','progress.lua','shading.lua','lifecycle.lua']) {
 // Export requests built by the real net module for the isolated HTTP test.
 if(process.argv[2]) {
   const L=state();
-  const script=`local n=require('net'); local j=require('json'); local b=n.build(100,1792411200,{id=1,beta=true},{x=50,z=50,floor=0},{ATTACK={level=12,xp=1584}},{finished=j.array({"Cook's Assistant"}),started=j.array({"The Blood Pact"})}); return j.encode({requests=j.array({{method='POST',path=n.REPORT,body=b},{method='GET',path=n.STATUS}})})`;
+  const script=`local n=require('net'); local j=require('json'); local b=n.build(100,1792411200,{id=1,beta=true},{x=50,z=50,floor=0},{ATTACK={level=12,xp=1584}},{finished=j.array({"Cook's Assistant"}),started=j.array({"The Blood Pact"})}); return j.encode({requests=j.array({{method='POST',path=n.REPORT,body=b},{method='GET',path=n.STATUS},{method='GET',path=n.TASKS}})})`;
   if(lauxlib.luaL_dostring(L,to_luastring(script))) throw Error(to_jsstring(lua.lua_tostring(L,-1)));
   fs.writeFileSync(process.argv[2],to_jsstring(lua.lua_tostring(L,-1)));
   lua.lua_close(L); console.log('Exported exact net.lua request fixture');
