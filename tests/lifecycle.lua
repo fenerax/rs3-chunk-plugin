@@ -3,14 +3,15 @@ local values, handlers, logs, windows, views, requests = {}, {}, {}, {}, {}, {}
 local allowed=false
 local who,valid='Alpha',true -- the logged-in character's display name, and whether the entity is valid
 -- broken['get:keyOwner'] (or set:, delete:) makes that storage call throw; a function decides per call.
-local broken={}
+local broken,lost={},{}
 local function db(op,k) local b=broken[op..':'..k]; if b==true or type(b)=='function' and b() then error('storage unavailable') end end
 -- Throws on the calls listed (1-based), counting from now.
 local function nth(...) local fails,n={},0; for _,i in ipairs({...}) do fails[i]=true end; return function() n=n+1; return fails[n] end end
 PersistentDB={CheckExists=function(_,k) db('get',k); return values[k]~=nil end,Delete=function(_,k) db('delete',k); values[k]=nil end}
 for _,kind in ipairs({'Bool','Int','String'}) do
   PersistentDB['Get'..kind]=function(_,k) db('get',k); return values[k] end
-  PersistentDB['Set'..kind]=function(_,k,v) db('set',k); values[k]=v; return true end
+  -- lost[k]: the write reports success but stores nothing.
+  PersistentDB['Set'..kind]=function(_,k,v) db('set',k); if not lost[k] then values[k]=v end; return true end
 end
 Event=setmetatable({},{__index=function(t,k)
   local event={Subscribe=function(ref,fn) handlers[k]={ref=ref,fn=fn} end,Unsubscribe=function(ref)
@@ -299,6 +300,23 @@ assert(values.keyOwner==require('identity').PENDING,'rebind over an unreadable o
 local before=#requests; test.action(); assert(#requests==before)
 who='Charlie'; key.content='third'; save.action(); assert(values.keyOwner=='Charlie')
 sends('the key works once Save finishes')
+-- Writes that claim success but don't stick, and read-backs that fail, are caught too.
+lost.personalKey=true; key.content='fourth'; save.action(); lost.personalKey=nil
+assert(values.personalKey=='third' and values.keyOwner~='Charlie' and settingsLine("Couldn't save the key"))
+quiet(70,'a key write that did not stick pauses')
+key.content='fourth'; save.action(); assert(values.personalKey=='fourth' and values.keyOwner=='Charlie'); sends('recovered')
+lost.keyOwner=true; who='Delta'; key.content='fifth'; save.action(); lost.keyOwner=nil
+assert(values.personalKey=='fourth' and values.keyOwner=='Charlie' and settingsLine("Couldn't save the key"))
+quiet(70,"Delta never gets Charlie's key")
+-- The key's read-back fails (each read is CheckExists then Get).
+broken['get:personalKey']=nth(1,2); key.content='fifth'; save.action(); broken['get:personalKey']=nil
+assert(values.keyOwner~='Delta' and values.keyOwner~='Charlie' and settingsLine("Couldn't save the key"))
+quiet(70,'a failed key read-back pauses Delta'); who='Charlie'; quiet(70,'and Charlie')
+who='Delta'; broken['get:keyOwner']=nth(3); key.content='fifth'; save.action(); broken['get:keyOwner']=nil
+-- The owner write may have landed; either way the key is only ever pending or Delta's.
+assert(values.personalKey=='fifth' and (values.keyOwner=='Delta' or values.keyOwner==require('identity').PENDING) and settingsLine('not tied'))
+key.content='fifth'; save.action(); assert(values.keyOwner=='Delta'); sends('and Save recovers')
+who='Charlie'
 -- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)
