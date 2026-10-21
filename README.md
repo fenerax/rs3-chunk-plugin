@@ -67,8 +67,9 @@ picker on another port, add it there.
 
 - The plugin sends only your position, levels, XP, quest names and your
   completed achievements (id, name and category), plus a few diagnostic lines
-  about what the plugin could read. Each kind can be turned off in Settings. It sends no account name,
-  character name or world number.
+  about what the plugin could read. Levels, quests and achievements each have
+  their own switch in Settings; position goes with every report. It sends no
+  account name, character name or world number.
 - The key is kept in the plugin's local storage, which the game does not document
   as encrypted. **Forget key** removes it; revoke it in the picker as well.
 - That storage is shared by every character on the PC, so the key remembers the

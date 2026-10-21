@@ -335,11 +335,14 @@ local function pump(seconds,reply) local from=#requests+1
   return bodies(from)
 end
 -- A fake picker that assembles parts like the real one and reports how far it got.
-local held
+-- A set it already finished is acknowledged as complete, not assembled again.
+local held,done=nil,{}
 local function picker(b)
   local a=b and b.achievements
-  if a and a.part==1 then held={snapshot=a.snapshot,received=1,parts=a.parts}
+  if a and done[a.snapshot] then held={snapshot=a.snapshot,received=a.parts,parts=a.parts}
+  elseif a and a.part==1 then held={snapshot=a.snapshot,received=1,parts=a.parts}
   elseif a and held and held.snapshot==a.snapshot and held.parts==a.parts and a.part==held.received+1 then held.received=a.part end
+  if held and held.received==held.parts then done[held.snapshot]=true end
   return {responseCode=200,data=json.encode({state='locked',chunkId='13613',accepts=json.array({'achievements'}),achievements=held})}
 end
 local function withAchievements(list) local out={} for _,b in ipairs(list) do if b.achievements then out[#out+1]=b end end return out end
@@ -350,7 +353,7 @@ assert(a.part==1 and a.parts==1 and #a.complete==1 and a.complete[1][1]==11 and 
 assert(got[1].diagnostics==nil and got[1].skills==nil and got[1].quests==nil,'a part travels alone')
 assert(#withAchievements(pump(700,picker))==0,'an unchanged set is not sent again')
 -- A picker restart forgets the set; the plugin notices from status and sends it once more.
-held=nil; assert(#withAchievements(pump(120,picker))==1,'resent after a picker restart')
+held,done=nil,{}; assert(#withAchievements(pump(120,picker))==1,'resent after a picker restart')
 -- A refusal backs off; a new completion waits out the back-off.
 config.Achievement.B.progress=-2
 local refuse=function(b) return b and b.achievements and {responseCode=400,data='{"message":"bad field"}'} or picker(b) end
@@ -362,7 +365,12 @@ assert(#withAchievements(pump(400,picker))>=1,'then tries again')
 values.sendAchievements=false; config.Achievement.C={id=13,name='Third',category=3,subCategory=-1,progress=-2}
 assert(#withAchievements(pump(700,picker))==0,'the setting turns them off')
 values.sendAchievements=true
-assert(#withAchievements(pump(120,picker))==1,'and back on')-- Closing stays closed; logging out and back in keeps it closed.
+assert(#withAchievements(pump(120,picker))==1,'and back on')
+-- Going back to a set the picker already finished (A, B, then A again) is one part, then quiet.
+config.Achievement.C.progress=1
+assert(#withAchievements(pump(700,picker))==1,'the earlier set is offered once')
+assert(#withAchievements(pump(700,picker))==0,'and acknowledged, not resent')
+-- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()

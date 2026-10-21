@@ -10,30 +10,48 @@ local function get(object, key)
 end
 local function varKey(variable) return get(variable, "id") or get(variable, "configName") or variable end
 -- Two small polynomial hashes over the id list: the same set always gets the same snapshot
--- name. Values stay below 2^37, so they are exact with 32-bit, 64-bit or float arithmetic.
+-- name. The products are floats (exact below 2^53), so 32-bit test integers and the game's
+-- 64-bit Lua give the same answer; integer products would overflow in 32 bits.
 local function checksum(text)
-  local a, b = 5381, 7
+  local a, b = 5381.0, 7.0
   for i = 1, #text do
     local byte = text:byte(i)
-    a = (a * 33 + byte) % 2147483647
-    b = (b * 31 + byte) % 2147483629
+    a = (a * 33.0 + byte) % 2147483647
+    b = (b * 31.0 + byte) % 2147483629
   end
-  return string.format("%08x%08x", math.floor(a), math.floor(b))
+  return string.format("%08x%08x", math.tointeger(a), math.tointeger(b))
+end
+M.checksum = checksum
+-- Names the picker accepts: 1-120 characters, no C0 or C1 controls, cut on a UTF-8 boundary.
+local function clean(name)
+  name = name:gsub("%c", " "):gsub("\xC2[\x80-\x9F]", " "):match("^%s*(.-)%s*$")
+  if #name > 120 then
+    local cut = 120
+    while cut > 0 and (name:byte(cut + 1) or 0) >= 0x80 and name:byte(cut + 1) < 0xC0 do cut = cut - 1 end
+    name = name:sub(1, cut):match("^(.-)%s*$")
+  end
+  if name ~= "" then return name end
+end
+local function category(value)
+  local n = type(value) == "number" and math.tointeger(value)
+  return n and n >= -1 and n or -1
 end
 -- Rows are [id, name, category, subCategory], sorted by id; nil when the table can't be read.
+-- A field that throws makes the whole read unavailable, so a hiccup never looks like a
+-- smaller set. Rows the picker would refuse (bad id or name) are skipped.
 function M.read()
   local source = get(config, "Achievement")
   if source == nil then return nil end
   local rows, seen = {}, {}
   local ok = pcall(function()
     for _, achievement in pairs(source) do
-      if get(achievement, "progress") == M.COMPLETE then
-        local id, name = get(achievement, "id"), get(achievement, "name")
-        if type(id) == "number" and id % 1 == 0 and type(name) == "string" and not seen[id] then
+      if achievement.progress == M.COMPLETE then
+        local id, name = achievement.id, achievement.name
+        id = type(id) == "number" and math.tointeger(id)
+        name = type(name) == "string" and clean(name)
+        if id and id >= 0 and name and not seen[id] then
           seen[id] = true
-          local category, sub = get(achievement, "category"), get(achievement, "subCategory")
-          rows[#rows + 1] = json.array({math.tointeger(id), name:gsub("[%c]", " "):sub(1, 120),
-            type(category) == "number" and math.tointeger(category) or -1, type(sub) == "number" and math.tointeger(sub) or -1})
+          rows[#rows + 1] = json.array({id, name, category(get(achievement, "category")), category(get(achievement, "subCategory"))})
         end
       end
     end

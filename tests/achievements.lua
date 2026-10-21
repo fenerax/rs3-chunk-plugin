@@ -23,10 +23,30 @@ eq(rows[1][2], "Tab here newline", "control characters"); eq(rows[1][3], 3); eq(
 eq(json.encode(rows[1]), '[10,"Tab here newline",3,-1]', "row shape")
 eq(achievements.read() ~= nil, true)
 fixture({row(1, -2, string.rep("n", 300))}); eq(#achievements.read()[1][2], 120, "long names are cut")
+-- A cut never splits a UTF-8 character: 119 ASCII bytes then a two-byte "é".
+fixture({row(1, -2, string.rep("n", 119) .. "\xC3\xA9xyz")}); eq(achievements.read()[1][2], string.rep("n", 119), "cut on a character boundary")
+fixture({row(1, -2, "  C1\xC2\x85control  ")}); eq(achievements.read()[1][2], "C1 control", "C1 controls and edge spaces")
+
+-- Rows the picker would refuse are skipped, not sent: negative ids, empty or blank names.
+-- Out-of-range categories become -1.
+fixture({row(-1, -2), row(5, -2, ""), row(6, -2, " \t "), {id = 7, name = "Low category", category = -5, subCategory = 2.5, progress = -2}})
+rows = achievements.read()
+eq(#rows, 1, "only the valid row"); eq(json.encode(rows[1]), '[7,"Low category",-1,-1]', "categories clamped")
 
 -- Missing or broken tables read as unavailable, never as "nothing complete".
 config = {}; eq(achievements.read(), nil, "no config.Achievement")
 config = {Achievement = setmetatable({}, {__pairs = function() error("boom") end})}; eq(achievements.read(), nil, "throwing table")
+-- One achievement whose progress can't be read makes the read unavailable, rather than a smaller set.
+fixture({row(1, -2), setmetatable({}, {__index = function() error("no access") end})}); eq(achievements.read(), nil, "throwing field")
+
+-- Snapshot names are exact integers in both 32-bit (Fengari) and 64-bit (game) Lua.
+-- Expected values come from arbitrary-precision arithmetic.
+eq(achievements.checksum("1,2,3,4"), "29eba3f745243189", "checksum 1-4")
+eq(achievements.checksum(""), "0000150500000007", "checksum empty")
+eq(achievements.checksum("354,1201"), "7959414c0ea550c3", "checksum pair")
+local ids = {}
+for i = 1, 900 do ids[i] = i end
+eq(achievements.checksum(table.concat(ids, ",")), "2dab8fa06b8e88fb", "checksum long")
 
 -- Parts stay under the byte limit and keep every row once, in order.
 local many = {}
