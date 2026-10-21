@@ -179,14 +179,16 @@ function M.new(store, callbacks, options)
       end)
       page:AddSimpleButton("Test connection",function() callbacks.test(function(message) self:message(message) end) end,{inline=true})
       page:AddSimpleButton("Forget key",function()
-        store:forget(); if key then key:SetText("",false) end; callbacks.connectionChanged(); self:message("Key forgotten")
+        local forgotten=store:forget(); if key then key:SetText("",false) end; callbacks.connectionChanged()
+        self:message(forgotten and "Key forgotten" or "Couldn't remove the key; try again")
       end,{inline=true})
       -- After a name change, or to move the key to this character on purpose.
       page:AddSimpleButton("Use key on this character",function()
         local name=identity.current()
         if not name then self:message("Log in to the character first"); return end
         if store:get("personalKey","String","")=="" then self:message("Save a key first"); return end
-        store:set("keyOwner","String",name); callbacks.connectionChanged(); self:message("Key now used on this character")
+        local saved=store:set("keyOwner","String",name); callbacks.connectionChanged()
+        self:message(saved and "Key now used on this character" or "Couldn't save that; try again")
       end)
       self.result=page:AddText({text="Save your key, then test the connection.",height=48,maxLines=2})
     end)

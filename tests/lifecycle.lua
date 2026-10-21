@@ -1,11 +1,14 @@
 -- Exercise the entry point against a small game/PrettyUI mock; never starts a client.
 local values, handlers, logs, windows, views, requests = {}, {}, {}, {}, {}, {}
 local allowed=false
-local who='Alpha' -- the logged-in character's display name
-PersistentDB={CheckExists=function(_,k) return values[k]~=nil end,Delete=function(_,k) values[k]=nil end}
+local who,valid='Alpha',true -- the logged-in character's display name, and whether the entity is valid
+-- broken['get:keyOwner'] (or set:, delete:) makes that storage call throw.
+local broken={}
+local function db(op,k) if broken[op..':'..k] then error('storage unavailable') end end
+PersistentDB={CheckExists=function(_,k) db('get',k); return values[k]~=nil end,Delete=function(_,k) db('delete',k); values[k]=nil end}
 for _,kind in ipairs({'Bool','Int','String'}) do
-  PersistentDB['Get'..kind]=function(_,k) return values[k] end
-  PersistentDB['Set'..kind]=function(_,k,v) values[k]=v; return true end
+  PersistentDB['Get'..kind]=function(_,k) db('get',k); return values[k] end
+  PersistentDB['Set'..kind]=function(_,k,v) db('set',k); values[k]=v; return true end
 end
 Event=setmetatable({},{__index=function(t,k)
   local event={Subscribe=function(ref,fn) handlers[k]={ref=ref,fn=fn} end,Unsubscribe=function(ref)
@@ -54,7 +57,7 @@ local chat={}; Chat={AddMessage=function(m) chat[#chat+1]=m end}
 Plugin={urls={home={},scratch={}},HasPermission=function(p) if p==2 then return true end; assert(p==1); return allowed end}
 log=function(line) logs[#logs+1]=line end
 GameState={GAME=30}
-Player={IsAvailable=function() return true end,GetEntity=function() return {displayName=who,coordGrid={mapSquareX=53,mapSquareZ=45,level=0}} end,
+Player={IsAvailable=function() return true end,GetEntity=function() return {displayName=who,isValid=valid,coordGrid={mapSquareX=53,mapSquareZ=45,level=0}} end,
   GetLevelUncapped=function(s) assert(type(s)=='number'); return 10 end,GetXPUncapped=function(s) assert(type(s)=='number'); return 1000 end}
 -- Beta shape: named numeric constants; FromID returns text the Player calls reject.
 SkillType={FromID=function(n) return 'skill'..n end}
@@ -240,16 +243,38 @@ assert(tw.children[5].content:find('no in%-game task list'),tw.children[5].conte
 local count=#requests; emit('Draw',{timeDeltaSecs=20}); emit('ServerLogic')
 assert(#requests==count or last().path=='/api/plugin/v1/report','a refused task list waits five minutes')
 -- Another character on this PC: everything pauses until the key is moved on purpose.
-who='Bravo'; local before=#requests
-for i=1,3 do emit('Draw',{timeDeltaSecs=61}); emit('ServerLogic') end
-assert(#requests==before,'no report or task fetch for another character')
-emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(panelWindow().children[5].content:find('another character'),panelWindow().children[5].content)
-test.action(); assert(#requests==before)
+-- Draw only counts deltas under 60 s, so time moves in 10 s steps.
+local function advance(seconds) for _=1,math.ceil(seconds/10) do emit('Draw',{timeDeltaSecs=10}); emit('ServerLogic') end end
+local function quiet(seconds,why) local n=#requests; advance(seconds); assert(#requests==n,why) end
+local function sends(why) local n=#requests; advance(70)
+  for _=1,3 do local r=last(); r.callback({responseCode=200,data='{"state":"locked","chunkId":"13613"}'}); advance(10) end
+  assert(#requests>n,why)
+end
+local function settingsLine(text) for _,c in ipairs(settings.children) do if (c.content or ''):find(text) then return true end end end
+advance(70); local inflight=last()
+who='Bravo'
+-- The reply to a request sent before the switch still lands, and nothing follows it.
+inflight.callback({responseCode=200,data='{"state":"locked","chunkId":"13613"}'})
+quiet(400,'no report or task fetch for another character')
+emit('Logic'); assert(panelWindow().children[5].content:find('another character'),panelWindow().children[5].content)
+local before=#requests; test.action(); assert(#requests==before)
+who=''; quiet(70,'an empty name waits'); emit('Logic'); assert(panelWindow().children[5].content:find('Waiting for your character'))
+who,valid='Alpha',false; quiet(70,'an invalid entity waits'); valid=true
 who=nil; click('Use key on this character'); assert(values.keyOwner=='Alpha') -- no name yet: unchanged
-emit('Draw',{timeDeltaSecs=61}); emit('ServerLogic'); assert(#requests==before)
+quiet(70,'still paused')
 who='Bravo'; click('Use key on this character'); assert(values.keyOwner=='Bravo')
-emit('Draw',{timeDeltaSecs=61}); emit('ServerLogic'); assert(#requests>before,'reports resume after re-binding')
--- Closing stays closed; logging out and back in keeps it closed.
+sends('reports resume after re-binding')
+-- Storage that can't be read or written never lets another character through.
+broken['get:keyOwner']=true; who='Charlie'; quiet(70,'unreadable owner pauses'); assert(values.keyOwner=='Bravo')
+broken['get:keyOwner']=nil; quiet(70,"still Bravo's key")
+values.keyOwner=nil; broken['set:keyOwner']=true; quiet(70,'an unbound key whose binding fails to save pauses')
+assert(values.keyOwner==nil); broken['set:keyOwner']=nil
+sends('the binding saves on a later try'); assert(values.keyOwner=='Charlie')
+-- A Forget that can't delete the key keeps its owner, says so, and the key stays bound.
+broken['delete:personalKey']=true; forget.action()
+assert(values.personalKey=='synthetic' and values.keyOwner=='Charlie' and settingsLine("Couldn't remove the key"))
+broken['delete:personalKey']=nil; who='Delta'; quiet(70,'a key that survived Forget stays with its owner')
+who='Charlie'-- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()

@@ -16,8 +16,22 @@ function M.new(db)
     self.writeOK = ok and saved ~= false
     return self.writeOK
   end
+  -- Like get, but tells an absent key (true, nil) from an unreadable one (false).
+  function self:read(key, kind)
+    local ok, value = pcall(function()
+      if not self.db:CheckExists(key) then return nil end
+      return self.db["Get" .. kind](self.db, key)
+    end)
+    return ok, value
+  end
+  -- The owner goes only once the key is confirmed gone, so a failed delete can't leave an
+  -- unbound key behind for the next character to pick up.
   function self:forget()
-    for _, key in ipairs({"personalKey", "keyOwner"}) do pcall(function() self.db:Delete(key) end) end
+    pcall(function() self.db:Delete("personalKey") end)
+    local ok, exists = pcall(function() return self.db:CheckExists("personalKey") end)
+    if not ok or exists then return false end
+    pcall(function() self.db:Delete("keyOwner") end)
+    return true
   end
   function self:present(key)
     local ok, exists = pcall(function() return self.db:CheckExists(key) end)
