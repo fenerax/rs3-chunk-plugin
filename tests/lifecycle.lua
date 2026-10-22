@@ -10,8 +10,10 @@ local function nth(...) local fails,n={},0; for _,i in ipairs({...}) do fails[i]
 PersistentDB={CheckExists=function(_,k) db('get',k); return values[k]~=nil end,Delete=function(_,k) db('delete',k); values[k]=nil end}
 for _,kind in ipairs({'Bool','Int','String'}) do
   PersistentDB['Get'..kind]=function(_,k) db('get',k); return values[k] end
-  -- lost[k]: the write reports success but stores nothing.
-  PersistentDB['Set'..kind]=function(_,k,v) db('set',k); if not lost[k] then values[k]=v end; return true end
+  -- lost[k]: the write reports success but stores nothing. Like the game, strings stop at a NUL.
+  PersistentDB['Set'..kind]=function(_,k,v) db('set',k)
+    if kind=='String' and type(v)=='string' then v=v:match('^[^\0]*') end
+    if not lost[k] then values[k]=v end; return true end
 end
 Event=setmetatable({},{__index=function(t,k)
   local event={Subscribe=function(ref,fn) handlers[k]={ref=ref,fn=fn} end,Unsubscribe=function(ref)

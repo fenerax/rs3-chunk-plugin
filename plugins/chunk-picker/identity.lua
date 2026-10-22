@@ -8,8 +8,11 @@ M.WAITING = "Waiting for your character name"
 M.STORAGE = "Can't check which character owns the key; paused"
 M.UNFINISHED = "Key save didn't finish; save the key again"
 -- Held in keyOwner while Save swaps the key, so a save that stops halfway pauses every
--- character instead of handing a key to the wrong one. Display names have no control characters.
-M.PENDING = "\0saving"
+-- character instead of handing a key to the wrong one.
+-- Display names are at most 12 letters, digits, spaces, hyphens or underscores, so this
+-- can't be one. Keep it printable: the game's storage cuts strings at a NUL, so the old
+-- "\0saving" never read back and every Save failed.
+M.PENDING = "<key save in progress>"
 function M.current()
   local ok, name = pcall(function()
     local entity = Player.GetEntity()
