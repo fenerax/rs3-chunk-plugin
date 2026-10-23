@@ -216,10 +216,8 @@ resized.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 assert(resized.destroyed and values.settingsWindow==false)
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(settingsWindow()==resized)
 click('Open in a bigger window'); assert(settingsWindow().options.width==700)
--- Size buttons for PrettyUI builds without edge resizing; applied on the next tick.
-for _,c in ipairs(settingsWindow().children) do if c.content=='Large' then c.action() end end
-emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
-assert(values.settingsW==640 and settingsWindow().options.width==640 and settingsWindow().options.height==600)
+-- No size buttons: the edges resize it.
+for _,c in ipairs(settingsWindow().children) do assert(c.content~='Large' and c.content~='Small',c.content) end
 settingsWindow().options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 -- Tasks: the panel's Tasks button opens a window that reads the picker's saved list.
 allowed=true; values.personalKey='synthetic'; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})

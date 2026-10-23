@@ -48,10 +48,9 @@ function M.widen(resize)
   pcall(function() resize:Refresh() end)
   return true
 end
--- Size buttons in the window, for exact sizes.
-M.SIZES = {{"Small",420,480},{"Medium",520,640},{"Large",640,820},{"Full height",560,100000}}
 -- The resizable window: smallest size, and the room its title bar and padding take from the tabs.
-M.MIN_W, M.MIN_H, M.CHROME = 360, 300, 90
+-- Edges resize it (confirmed on beta), so there are no size buttons.
+M.MIN_W, M.MIN_H, M.CHROME = 360, 300, 60
 -- options.windowed: build into our own movable, resizable window on the plugin layer instead of the
 -- hub's settings page, whose size the hub fixes.
 function M.new(store, callbacks, options)
@@ -316,14 +315,6 @@ function M.new(store, callbacks, options)
         onClose=function() store:set("settingsWindow","Bool",false) end})
       self.window=window; self.view=window; self.built={x=x,y=y,w=w,h=h}
       self.resizable=window.resize~=nil and (M.widen(window.resize) and "wide" or "narrow") or false
-      section("sizes",function()
-        for i,size in ipairs(M.SIZES) do
-          -- Applied on the next tick: rebuilding inside the button's own click would destroy it mid-call.
-          window:AddSimpleButton(size[1],function()
-            store:set("settingsW","Int",size[2]); store:set("settingsH","Int",size[3]); self.resized=true
-          end,{inline=i>1,tooltip="Resize this window"})
-        end
-      end)
       fill(window,h-M.CHROME)
     end)
     -- Don't retry a window that failed to build every second; Open tries again.
@@ -334,8 +325,6 @@ function M.new(store, callbacks, options)
   function self:tick()
     if not store:get("settingsWindow","Bool",false) then if self.window then self:destroy() end; return end
     if not self.window then if not self.error then self:build() end; return end
-    if self.resized then self.resized=nil; self.window=nil; local view=self.view; self.view=nil
-      pcall(function() view:Destroy() end); self:build(); return end
     local x,y,w,h=geometry()
     if not x then self:build(); return end
     if x~=self.built.x or y~=self.built.y then
