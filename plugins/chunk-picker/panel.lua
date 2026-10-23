@@ -36,6 +36,8 @@ function M.extra(status,showPartner)
   end
   return table.concat(lines,"; ")
 end
+-- Expanded size: the default, and the smallest that still shows every line and the Tasks button.
+M.WIDTH, M.HEIGHT, M.MIN_W, M.MIN_H = 330, 236, 220, 220
 function M.new(store, changed, openTasks)
   local self={store=store, positionSaved="not moved", collapsed=store:get("collapsed","Bool",false)}
   function self:savePosition()
@@ -61,8 +63,17 @@ function M.new(store, changed, openTasks)
     -- Rebuild only when our window has stopped working (for example after the UI layer is recreated).
     -- Don't compare component handles: the client may return a fresh wrapper on every lookup, which
     -- would rebuild the window every second and interrupt dragging.
-    local ok,width=pcall(function() return self.window.root.width end)
-    if not ok or type(width)~="number" then self:build() end
+    local ok,width,height=pcall(function() return self.window.root.width,self.window.root.height end)
+    if not ok or type(width)~="number" then self:build(); return end
+    if type(height)~="number" then return end
+    width,height=math.floor(width),math.floor(height)
+    -- A new size rebuilds the lines to fill it once it has held for a second, so a drag in
+    -- progress isn't interrupted. Collapsed keeps its title-bar height; only the width counts.
+    if self.collapsed then height=self.height end
+    if width==self.width and height==self.height then self.pending=nil
+    elseif self.pending and self.pending.w==width and self.pending.h==height then
+      store:set("panelW","Int",width); if not self.collapsed then store:set("panelH","Int",height) end; self:build()
+    else self.pending={w=width,h=height} end
   end
   function self:build()
     self:destroy()
@@ -71,16 +82,18 @@ function M.new(store, changed, openTasks)
       local parent=ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
       if not parent then self.error="Waiting for UI"; return end
       self.parent=parent
-      local width=330
+      local width=math.max(M.MIN_W,math.min(store:get("panelW","Int",M.WIDTH),parent.width))
       local savedX=store:get("panelX","Int",math.floor((parent.width-width)/2))
       local savedY=store:get("panelY","Int",40)
       -- Collapsed: just the title bar. On beta 40 left a sliver under it and 34 clipped the bottom border.
-      local height=self.collapsed and 37 or 236
+      local height=self.collapsed and 37 or math.max(M.MIN_H,math.min(store:get("panelH","Int",M.HEIGHT),parent.height))
       local x=math.max(0,math.min(savedX,math.max(0,parent.width-width)))
       local y=math.max(0,math.min(savedY,math.max(0,parent.height-height)))
       local w=prettyui.Window.new(parent,{title="Chunk Picker",x=x,y=y,width=width,height=height,
-        minWidth=220,minHeight=30,scrollable=false,onClose=function() store:set("showPanel","Bool",false); changed() end})
-      self.window=w; self.x=x; self.y=y
+        resizable=not self.collapsed,minWidth=M.MIN_W,minHeight=self.collapsed and 30 or M.MIN_H,scrollable=false,
+        onClose=function() store:set("showPanel","Bool",false); changed() end})
+      self.window=w; self.x=x; self.y=y; self.width=width; self.height=height; self.pending=nil
+      self.resizable=w.resize~=nil and (require("settings").widen(w.resize) and "wide" or "narrow") or false
       if x~=savedX or y~=savedY then
         local a=store:set("panelX","Int",x); local b=store:set("panelY","Int",y)
         self.positionSaved=a and b and "yes (clamped)" or "write failed"
