@@ -53,7 +53,6 @@ function M.new(store, changed, openTasks)
     self:savePosition()
     -- This title control was created directly, so also release its tooltip bindings explicitly.
     if self.toggle then pcall(function() self.toggle:Destroy() end); self.toggle=nil end
-    if self.tasksButton then pcall(function() self.tasksButton:Destroy() end); self.tasksButton=nil end
     if self.window then pcall(function() self.window:Destroy() end) end
     self.window=nil
   end
@@ -91,16 +90,15 @@ function M.new(store, changed, openTasks)
       self.toggle=prettyui.SimpleButton.new(w.root,self.collapsed and "+" or "-",function()
         self.collapsed=not self.collapsed; store:set("collapsed","Bool",self.collapsed); self.rebuild=true
       end,{x=-32,y=4,xAnchor=1,width=24,height=24,tooltip=self.collapsed and "Expand Chunk Picker" or "Collapse Chunk Picker"})
-      if openTasks then
-        self.tasksButton=prettyui.SimpleButton.new(w.root,"Tasks",function() openTasks() end,
-          {x=-92,y=4,xAnchor=1,width=56,height=24,tooltip="Your active tasks: here and all"})
-      end
       if not self.collapsed then
         self.chunk=w:AddText({text="Waiting for location",height=22,maxLines=1})
         self.state=w:AddText({text="Not connected",height=36,maxLines=2})
         self.floor=w:AddText({text="",height=18,maxLines=1})
         self.extra=w:AddText({text="",height=36,maxLines=2})
         self.sync=w:AddText({text="Open plugin Settings to connect",height=36,maxLines=2})
+        -- In the body, not the title bar: PrettyUI's drag layer covers the title bar up to the
+        -- last 34 px and sits in front, so a title button there only ever started a drag.
+        if openTasks then w:AddSimpleButton("Tasks",function() openTasks() end,{tooltip="Your active tasks: here and all"}) end
       end
       self.error=nil
     end)

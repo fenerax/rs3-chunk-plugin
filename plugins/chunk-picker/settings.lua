@@ -10,6 +10,7 @@ M.PALETTE = {{"Red",0xFF3B30},{"Orange",0xFF9F1C},{"Amber",0xFFB020},{"Yellow",0
 M.TARGETS = {{"lockedBorder","Locked border"},{"rollableBorder","Rollable border"},
   {"lockedFill","Locked fill"},{"rollableFill","Rollable fill"},{"partner","Partner's chunks"}}
 function M.hex(rgb) return string.format("#%06X", rgb) end
+local function keyLine(key) return key~="" and ("Personal key: saved, ends "..key:sub(-4)) or "Personal key: not saved" end
 -- Text drawn in a dark colour vanishes on the dark settings background; lift it towards white.
 function M.readable(rgb)
   local r,g,b=rgb>>16&0xFF,rgb>>8&0xFF,rgb&0xFF
@@ -160,7 +161,8 @@ function M.new(store, callbacks, options)
       -- A masked field reads back empty, so the field is visible only while pasting; a saved key is
       -- never put back into it, which keeps it out of later screenshots.
       local saved=store:get("personalKey","String","")
-      page:AddText(saved~="" and ("Personal key: saved, ends "..saved:sub(-4)) or "Personal key: not saved")
+      -- Kept so Save and Forget can update it; it used to say "not saved" after a good Save.
+      self.keyStatus=page:AddText(keyLine(saved))
       local options={text="",placeholder=saved~="" and "Paste a new key to replace it" or "Paste your personal plugin key",maxLength=256}
       local modes=ui and ui.TextContentVisibilityMode
       if modes and modes.VISIBLE~=nil then options.visibility=modes.VISIBLE end
@@ -176,11 +178,13 @@ function M.new(store, callbacks, options)
         local failed=identity.save(store,text); callbacks.connectionChanged()
         if failed then self:message(failed); return end
         pcall(function() key:SetText("",false) end); self:message("Key saved, ends "..text:sub(-4))
+        if self.keyStatus then self.keyStatus.content=keyLine(text) end
       end)
       page:AddSimpleButton("Test connection",function() callbacks.test(function(message) self:message(message) end) end,{inline=true})
       page:AddSimpleButton("Forget key",function()
         local forgotten=store:forget(); if key then key:SetText("",false) end; callbacks.connectionChanged()
         self:message(forgotten and "Key forgotten" or "Couldn't remove the key; try again")
+        if forgotten and self.keyStatus then self.keyStatus.content=keyLine("") end
       end,{inline=true})
       -- After a name change, or to move the key to this character on purpose.
       page:AddSimpleButton("Use key on this character",function()

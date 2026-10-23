@@ -105,6 +105,8 @@ assert(save and test and forget and key)
 for _,c in ipairs(settings.children) do if c.content=='home' then c.action() end end; assert(values.server=='home')
 for _,c in ipairs(settings.children) do if c.content=='scratch' then c.action() end end; assert(values.server=='scratch')save.action(); assert(values.personalKey==nil) -- an empty paste never clears a saved key
 key.content='synthetic'; save.action(); assert(values.personalKey=='synthetic'); assert(key.content=='')
+local function keyStatus() for _,c in ipairs(settings.children) do if (c.content or ''):find('^Personal key:') then return c.content end end end
+assert(keyStatus()=='Personal key: saved, ends etic', keyStatus()) -- the status line follows a Save
 assert(values.keyOwner=='Alpha') -- saved on this character
 allowed=true; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
 test.action(); assert(#requests==1 and requests[1].path=='/api/plugin/v1/status')
@@ -180,7 +182,7 @@ assert(codeField.content=='CP1.bnldtmho1.-.-.-.-.-')
 test.action(); req=requests[#requests]
 allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=false}); assert(req.cancelled)
 req.callback({responseCode=200,data='{"state":"unlocked","chunkId":"13613"}'})
-forget.action(); assert(values.personalKey==nil and values.keyOwner==nil)
+forget.action(); assert(values.personalKey==nil and values.keyOwner==nil); assert(keyStatus()=='Personal key: not saved', keyStatus())
 emit('ContentLayerReady',{component=root}); assert(views[#views].children[1].content=='Diagnostics')
 local function panelWindow()
   for i=#windows,1,-1 do local t=windows[i].title or ''; if t=='Chunk Picker' or t:find(' · ') then return windows[i] end end
@@ -217,7 +219,10 @@ allowed=true; values.personalKey='synthetic'; emit('OptionalPermissionChanged',{
 local function tasksWindow() for i=#windows,1,-1 do if (windows[i].title or ''):find('^Chunk tasks') then return windows[i] end end end
 local function last() return requests[#requests] end
 assert(not tasksWindow())
-panelWindow().root.children[2].action(); assert(values.tasksWindow==true)
+-- The button sits in the body: the title bar beyond the collapse toggle is PrettyUI's drag layer.
+assert(#panelWindow().root.children==1, 'only the collapse toggle in the title bar')
+local tasksButton; for _,c in ipairs(panelWindow().children) do if c.content=='Tasks' then tasksButton=c end end
+tasksButton.action(); assert(values.tasksWindow==true)
 local tw=tasksWindow(); assert(tw and not tw.destroyed)
 emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic')
 assert(values.keyOwner=='Alpha') -- a key with no owner belongs to the first character that uses it
