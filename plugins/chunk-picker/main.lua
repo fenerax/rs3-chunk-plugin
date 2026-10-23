@@ -96,7 +96,7 @@ local function diagnosticLines()
     "127.0.0.1 reached: "..tostring(net.localhostConnected),
     "Clock: "..(net:epoch(now) and "available" or "awaiting HTTP Date"),
     "World channel: id=1; beta="..tostring(store:get("beta","Bool",true)),
-    "Panel: "..(panel.error or "ready").."; storage="..tostring(store.writeOK),
+    "Panel: "..(panel.error or "ready").."; storage="..tostring(store.writeOK).."; edge resize="..tostring(panel.resizable),
     "Payload: "..(net.payloadWarning or "within 16 KB"),
     "Achievements: "..achievements:describe().."; picker accepts="..tostring(net:accepts("achievements")),
     "Shading: "..shading:describe(),

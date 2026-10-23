@@ -25,6 +25,9 @@ local parsed = tasks.list(many)
 local h, r, page, pages = tasks.page(parsed, 'all', 99)
 assert(page == 9 and pages == 9 and #r == 4 and r[1] == 'Skills · Task 97', h)
 assert(h == 'All active: 130 · page 9/9 · first 100', h)
+-- A taller window pages by its own row count.
+h, r, page, pages = tasks.page(parsed, 'all', 2, nil, 20)
+assert(#r == 20 and r[1] == 'Skills · Task 21' and pages == 5, h)
 h, r = tasks.page(parsed, 'here', 1)
 assert(h == 'Waiting for your location in the picker.' and #r == 0)
 

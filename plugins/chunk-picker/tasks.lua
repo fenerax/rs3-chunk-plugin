@@ -1,6 +1,9 @@
 -- In-game active tasks: "Here" (the chunk you're in) and "All active", read from the list the
 -- picker last saved. The picker never calculates tasks for this window.
 local M = {ROWS = 12, REFRESH = 15, MIN_GAP = 3, WIDTH = 360}
+-- Resizable: a taller window shows more rows per page. CHROME is the title bar, buttons and header.
+M.CHROME, M.ROW, M.MIN_W, M.MIN_ROWS, M.MAX_ROWS = 112, 18, 300, 3, 40
+function M.rowsFor(height) return math.max(M.MIN_ROWS, math.min(M.MAX_ROWS, math.floor((height - M.CHROME) / M.ROW))) end
 local function clean(text, limit) return type(text) == "string" and (text:gsub("[<>%c]", "")):sub(1, limit) or nil end
 local function count(n) return math.type(n) == "integer" and n >= 0 and n or 0 end
 local function rows(list, max)
@@ -26,16 +29,17 @@ end
 function M.row(row)
   return (row.category ~= "" and (row.category .. " · ") or "") .. row.label .. (row.level and (" (" .. row.level .. ")") or "")
 end
--- The header line and one page of rows for a view ("here" or "all").
-function M.page(list, view, page, message)
+-- The header line and one page of rows for a view ("here" or "all"); `size` rows a page.
+function M.page(list, view, page, message, size)
+  size = size or M.ROWS
   if not list then return message or "Loading tasks…", {}, 1, 1 end
   if not list.ready then return "No saved task list yet. Open your tasks in the picker once.", {}, 1, 1 end
   local here = view == "here"
   if here and not list.hereKnown then return "Waiting for your location in the picker.", {}, 1, 1 end
   local shown, total = here and list.here or list.all, here and list.hereCount or list.allCount
-  local pages = math.max(1, math.ceil(#shown / M.ROWS)); page = math.max(1, math.min(page, pages))
+  local pages = math.max(1, math.ceil(#shown / size)); page = math.max(1, math.min(page, pages))
   local out = {}
-  for i = (page - 1) * M.ROWS + 1, math.min(#shown, page * M.ROWS) do out[#out + 1] = M.row(shown[i]) end
+  for i = (page - 1) * size + 1, math.min(#shown, page * size) do out[#out + 1] = M.row(shown[i]) end
   local head
   if total == 0 then head = here and "No active tasks in this chunk." or "No active tasks."
   else
@@ -54,14 +58,23 @@ function M.new(store)
   function self:open() store:set("tasksWindow", "Bool", true); self.error = nil; self.wanted = true; self:build() end
   function self:destroy()
     if self.window then pcall(function() self.window:Destroy() end) end
-    self.window = nil; self.lines = nil
+    self.window = nil; self.lines = nil; self.pending = nil
   end
   function self:savePosition()
     if not self.window then return end
-    local ok, x, y = pcall(function() return self.window.root.x, self.window.root.y end)
-    if ok and type(x) == "number" and type(y) == "number" and (math.floor(x) ~= self.x or math.floor(y) ~= self.y) then
+    local ok, x, y, w, h = pcall(function() local r = self.window.root; return r.x, r.y, r.width, r.height end)
+    if not ok or type(x) ~= "number" or type(y) ~= "number" then return end
+    if math.floor(x) ~= self.x or math.floor(y) ~= self.y then
       self.x = math.floor(x); self.y = math.floor(y); store:set("tasksX", "Int", self.x); store:set("tasksY", "Int", self.y)
     end
+    if type(w) ~= "number" or type(h) ~= "number" then return end
+    w, h = math.floor(w), math.floor(h)
+    -- A new size rebuilds the rows to fill it once it has held for a second, so a drag in
+    -- progress isn't interrupted.
+    if w == self.w and h == self.h then self.pending = nil
+    elseif self.pending and self.pending.w == w and self.pending.h == h then
+      store:set("tasksW", "Int", w); store:set("tasksH", "Int", h); self:build()
+    else self.pending = {w = w, h = h} end
   end
   local function choose(view)
     -- Applied on the next render, not inside the button's own click.
@@ -73,21 +86,24 @@ function M.new(store)
     local ok, err = pcall(function()
       local parent = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
       if not parent then return end
-      local height = 112 + M.ROWS * 18
-      local x = math.max(0, math.min(store:get("tasksX", "Int", 40), math.max(0, parent.width - M.WIDTH)))
+      local width = math.max(M.MIN_W, math.min(store:get("tasksW", "Int", M.WIDTH), parent.width))
+      local height = math.max(M.CHROME + M.MIN_ROWS * M.ROW, math.min(store:get("tasksH", "Int", M.CHROME + M.ROWS * M.ROW), parent.height))
+      self.rows = M.rowsFor(height)
+      local x = math.max(0, math.min(store:get("tasksX", "Int", 40), math.max(0, parent.width - width)))
       local y = math.max(0, math.min(store:get("tasksY", "Int", 300), math.max(0, parent.height - height)))
-      local w = prettyui.Window.new(parent, {title = "Chunk tasks", x = x, y = y, width = M.WIDTH, height = height,
-        minWidth = 240, minHeight = 120, scrollable = false,
+      local w = prettyui.Window.new(parent, {title = "Chunk tasks", x = x, y = y, width = width, height = height,
+        resizable = true, minWidth = M.MIN_W, minHeight = M.CHROME + M.MIN_ROWS * M.ROW, scrollable = false,
         -- Closing only marks it; tick() tears it down outside PrettyUI's own close handling.
         onClose = function() store:set("tasksWindow", "Bool", false) end})
-      self.window = w; self.x = x; self.y = y
+      self.window = w; self.x = x; self.y = y; self.w = width; self.h = height
+      self.resizable = w.resize ~= nil and (require("settings").widen(w.resize) and "wide" or "narrow") or false
       w:AddSimpleButton("Here", function() choose("here") end, {tooltip = "Active tasks in the chunk you're in"})
       w:AddSimpleButton("All active", function() choose("all") end, {inline = true, tooltip = "Your whole active list"})
       w:AddSimpleButton("Back", function() self.page = math.max(1, self.page - 1) end, {inline = true})
       w:AddSimpleButton("More", function() self.page = self.page + 1 end, {inline = true})
       self.head = w:AddText({text = "Loading tasks…", height = 36, maxLines = 2})
       self.lines = {}
-      for i = 1, M.ROWS do self.lines[i] = w:AddText({text = "", height = 18, maxLines = 1}) end
+      for i = 1, self.rows do self.lines[i] = w:AddText({text = "", height = M.ROW, maxLines = 1}) end
     end)
     -- Don't retry a window that failed to build every second; the Tasks button tries again.
     if not ok then self.error = tostring(err):gsub("[%c]", " "):sub(1, 100); self:destroy() end
@@ -100,16 +116,17 @@ function M.new(store)
   end
   function self:render(list, message)
     if not self.window or not self.lines then return end
-    local head, lines, page = M.page(list, self.view, self.page, message)
+    local head, lines, page = M.page(list, self.view, self.page, message, #self.lines)
     self.page = page
     pcall(function()
       self.window:SetTitle(self.view == "here" and "Chunk tasks: here" or "Chunk tasks: all active")
       self.head.content = head
-      for i = 1, M.ROWS do self.lines[i].content = lines[i] or "" end
+      for i = 1, #self.lines do self.lines[i].content = lines[i] or "" end
     end)
   end
   function self:describe()
-    return (self.error and ("failed: " .. self.error)) or (self.window and ("open, " .. self.view)) or "closed"
+    return (self.error and ("failed: " .. self.error))
+      or (self.window and ("open, " .. self.view .. "; " .. #self.lines .. " rows; edge resize=" .. tostring(self.resizable))) or "closed"
   end
   return self
 end

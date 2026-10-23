@@ -1,6 +1,6 @@
 -- Typed, immediate writes: no proxy objects and no key values in diagnostics.
 local M = {}
-M.keys = {"server", "personalKey", "keyOwner", "sendSkills", "sendQuests", "sendAchievements", "showPanel", "showPartner", "warnLocked", "warnRoll", "warnChat", "shadeChunks", "shadeColours", "shadeWidth", "shadeWalls", "shadeGrid", "shadeFillLocked", "shadeFillRollable", "shadeFillStrength", "shadeFillStyle", "shadePartner", "shadeRgbPartner", "shadeRgbLocked", "shadeRgbRollable", "shadeRgbFillLocked", "shadeRgbFillRollable", "beta", "collapsed", "panelX", "panelY", "settingsWindow", "settingsX", "settingsY", "settingsW", "settingsH", "tasksWindow", "tasksView", "tasksX", "tasksY", "sequence"}
+M.keys = {"server", "personalKey", "keyOwner", "sendSkills", "sendQuests", "sendAchievements", "showPanel", "showPartner", "warnLocked", "warnRoll", "warnChat", "shadeChunks", "shadeColours", "shadeWidth", "shadeWalls", "shadeGrid", "shadeFillLocked", "shadeFillRollable", "shadeFillStrength", "shadeFillStyle", "shadePartner", "shadeRgbPartner", "shadeRgbLocked", "shadeRgbRollable", "shadeRgbFillLocked", "shadeRgbFillRollable", "beta", "collapsed", "panelX", "panelY", "panelW", "panelH", "settingsWindow", "settingsX", "settingsY", "settingsW", "settingsH", "tasksWindow", "tasksView", "tasksX", "tasksY", "tasksW", "tasksH", "sequence"}
 function M.new(db)
   local self = {db = db, writeOK = true}
   function self:get(key, kind, default)

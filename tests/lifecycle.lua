@@ -105,6 +105,8 @@ assert(save and test and forget and key)
 for _,c in ipairs(settings.children) do if c.content=='home' then c.action() end end; assert(values.server=='home')
 for _,c in ipairs(settings.children) do if c.content=='scratch' then c.action() end end; assert(values.server=='scratch')save.action(); assert(values.personalKey==nil) -- an empty paste never clears a saved key
 key.content='synthetic'; save.action(); assert(values.personalKey=='synthetic'); assert(key.content=='')
+local function keyStatus() for _,c in ipairs(settings.children) do if (c.content or ''):find('^Personal key:') then return c.content end end end
+assert(keyStatus()=='Personal key: saved, ends etic', keyStatus()) -- the status line follows a Save
 assert(values.keyOwner=='Alpha') -- saved on this character
 allowed=true; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
 test.action(); assert(#requests==1 and requests[1].path=='/api/plugin/v1/status')
@@ -180,7 +182,7 @@ assert(codeField.content=='CP1.bnldtmho1.-.-.-.-.-')
 test.action(); req=requests[#requests]
 allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=false}); assert(req.cancelled)
 req.callback({responseCode=200,data='{"state":"unlocked","chunkId":"13613"}'})
-forget.action(); assert(values.personalKey==nil and values.keyOwner==nil)
+forget.action(); assert(values.personalKey==nil and values.keyOwner==nil); assert(keyStatus()=='Personal key: not saved', keyStatus())
 emit('ContentLayerReady',{component=root}); assert(views[#views].children[1].content=='Diagnostics')
 local function panelWindow()
   for i=#windows,1,-1 do local t=windows[i].title or ''; if t=='Chunk Picker' or t:find(' · ') then return windows[i] end end
@@ -188,6 +190,13 @@ end
 local old=panelWindow(); root=component(nil,{width=800,height=600}); emit('WindowSizeChanged'); assert(old.destroyed)
 emit('GameStateChanged',{newState=37}); assert(panelWindow().destroyed)
 emit('GameStateChanged',{newState=30}); assert(not panelWindow().destroyed)
+-- Edge resize: the panel rebuilds at a size that has held for a second, and keeps it.
+local pw=panelWindow(); assert(pw.options.resizable and pw.options.width==330 and pw.options.height==236)
+pw.root:SetSize(420,300)
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(panelWindow()==pw)
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); local bigger=panelWindow()
+assert(bigger~=pw and pw.destroyed and bigger.options.width==420 and bigger.options.height==300)
+assert(values.panelW==420 and values.panelH==300)
 -- The hub page can't be resized, so it opens the same tabs in a movable, resizable window.
 local function settingsWindow()
   for i=#windows,1,-1 do if windows[i].title=='Chunk Picker settings' then return windows[i] end end
@@ -214,10 +223,14 @@ assert(values.settingsW==640 and settingsWindow().options.width==640 and setting
 settingsWindow().options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 -- Tasks: the panel's Tasks button opens a window that reads the picker's saved list.
 allowed=true; values.personalKey='synthetic'; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
+local tasks=require('tasks')
 local function tasksWindow() for i=#windows,1,-1 do if (windows[i].title or ''):find('^Chunk tasks') then return windows[i] end end end
 local function last() return requests[#requests] end
 assert(not tasksWindow())
-panelWindow().root.children[2].action(); assert(values.tasksWindow==true)
+-- The button sits in the body: the title bar beyond the collapse toggle is PrettyUI's drag layer.
+assert(#panelWindow().root.children==1, 'only the collapse toggle in the title bar')
+local tasksButton; for _,c in ipairs(panelWindow().children) do if c.content=='Tasks' then tasksButton=c end end
+tasksButton.action(); assert(values.tasksWindow==true)
 local tw=tasksWindow(); assert(tw and not tw.destroyed)
 emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic')
 assert(values.keyOwner=='Alpha') -- a key with no owner belongs to the first character that uses it
@@ -239,6 +252,15 @@ assert(tw.title=='Chunk tasks: here' and tw.children[5].content=='Here: 1 task',
 assert(tw.children[6].content=='Skills · Mine copper (5)' and tw.children[7].content=='')
 tw.children[2].action(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 assert(tw.title=='Chunk tasks: all active' and values.tasksView=='all' and tw.children[7].content=='Extra · Visit Nardah')
+-- Edge resize: a taller window shows more rows, a wider one more of each label; both are kept.
+assert(tw.options.resizable and #tw.children==5+tasks.ROWS)
+tw.root:SetSize(520,tasks.CHROME+20*tasks.ROW)
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tasksWindow()==tw)
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); local tall=tasksWindow()
+assert(tall~=tw and tw.destroyed and tall.options.width==520 and #tall.children==5+20,#tall.children)
+assert(values.tasksW==520 and values.tasksH==tasks.CHROME+20*tasks.ROW and tall.children[7].content=='Extra · Visit Nardah')
+assert(tasks.rowsFor(0)==tasks.MIN_ROWS and tasks.rowsFor(5000)==tasks.MAX_ROWS)
+tw=tall
 -- No new request inside the refresh interval; a picker without the route never blocks reports.
 emit('ServerLogic'); assert(#requests==reports)
 emit('Draw',{timeDeltaSecs=16}); emit('ServerLogic')
