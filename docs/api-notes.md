@@ -148,6 +148,9 @@ server-transmitted vars are readable.
 - Props: `slotCount`, `usedSlotCount`, `freeSlotCount`, `isValid`. A slot is `{obj : ObjType, count}`.
 - `config.Inv["BANK"]` exists. When bank contents are present (probably only while it's open) is UNDOCUMENTED, and so
   are the backpack and equipment inv names.
+- `items.lua` tries `config.Inv` INV, BACKPACK, INVENTORY, then id 93 for the backpack, and WORN, EQUIPMENT,
+  WORNITEMS, then id 94 for worn items (the classic cache ids). Diagnostics show which one answered ("via").
+  Empty slots are assumed to hold id -1 or no object. Check both on beta.
 
 **Guideline limit:** exporting info about OTHER players is prohibited. The player's own data is fine.
 
