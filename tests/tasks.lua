@@ -30,6 +30,33 @@ h, r, page, pages = tasks.page(parsed, 'all', 2, nil, 20)
 assert(#r == 20 and r[1] == 'Skills · Task 21' and pages == 5, h)
 h, r = tasks.page(parsed, 'here', 1)
 assert(h == 'Waiting for your location in the picker.' and #r == 0)
+assert(parsed.allFrom == nil, 'an older picker sends no allFrom, so paging stays within the first 100')
+
+-- A picker that pages: pages run over the whole list; a page outside the rows held asks for them.
+local function chunk(from, total)
+  local body = {v = 1, ready = true, hereKnown = false, here = {}, all = {}, hereCount = 0, allCount = total, allFrom = from}
+  for i = from + 1, math.min(from + tasks.CHUNK, total) do body.all[#body.all + 1] = {label = 'Task ' .. i, category = 'Skills'} end
+  return tasks.list(body)
+end
+local first, rest = chunk(0, 130), chunk(96, 130)
+assert(first.allFrom == 0 and first.allHeld == 100 and rest.allFrom == 96 and rest.allHeld == 34)
+local want
+h, r, page, pages, want = tasks.page(first, 'all', 8)
+assert(h == 'All active: 130 · page 8/11' and r[12] == 'Skills · Task 96' and want == nil, h)
+h, r, page, pages, want = tasks.page(first, 'all', 9)
+assert(h == 'All active: 130 · page 9/11 · loading…' and #r == 0 and want == 96, h)
+h, r, page, pages, want = tasks.page(rest, 'all', 9)
+assert(#r == 12 and r[1] == 'Skills · Task 97' and r[12] == 'Skills · Task 108' and want == nil, h)
+h, r, page, pages, want = tasks.page(rest, 'all', 99)
+assert(page == 11 and #r == 10 and r[10] == 'Skills · Task 130' and h == 'All active: 130 · page 11/11', h)
+-- Back past the rows held asks for the rows that end at that page.
+h, r, page, pages, want = tasks.page(rest, 'all', 8)
+assert(#r == 0 and want == 0, h)
+h, r, page, pages, want = tasks.page(chunk(150, 300), 'all', 12, nil, 12)
+assert(want == 44, tostring(want))
+-- The Here view is never paged by the picker.
+assert(select(5, tasks.page(rest, 'here', 1)) == nil)
+for _, bad in ipairs({-1, 1.5, '3'}) do assert(tasks.list({v = 1, ready = true, allFrom = bad}).allFrom == nil, tostring(bad)) end
 
 -- Not ready, stale, empty and still loading.
 assert(tasks.page(tasks.list({v = 1, ready = false}), 'all', 1) == 'No saved task list yet. Open your tasks in the picker once.')
