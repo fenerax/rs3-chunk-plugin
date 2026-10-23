@@ -112,6 +112,16 @@ local function diagnosticLines()
         .."; edge resize="..tostring(settingsWindow.resizable)),
   }
   for _,key in ipairs(require("store").keys) do lines[#lines+1]="DB "..key..": "..store:present(key) end
+  -- Whether each server has a key of its own, never the key.
+  pcall(function()
+    local active,names=store:get("server","String","scratch"),{}
+    for name in pairs(Plugin.urls) do names[#names+1]=tostring(name) end
+    table.sort(names)
+    for i,name in ipairs(names) do
+      names[i]=name.."="..store:present(name==active and "personalKey" or (require("identity").parked(name)))
+    end
+    lines[#lines+1]="Keys by server: "..table.concat(names,", ")
+  end)
   for i=1,5 do
     local r=net.history[i]
     lines[#lines+1]=r and ("HTTP "..i..": "..r.code.." timedOut="..tostring(r.timedOut).." failed="..tostring(r.failed).." errorInfo="..r.errorInfo)
