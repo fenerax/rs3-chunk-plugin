@@ -47,16 +47,51 @@ function M.new(store)
   function self:describe() return self.state end
   return self
 end
+local function wrote(store, name, value)
+  store:set(name, "String", value)
+  local ok, stored = store:read(name, "String")
+  return ok and stored == value
+end
 -- Saves a new key for the current character (or for whoever uses it first when no name is
 -- known yet). Returns nil when saved, or the reason it wasn't.
 function M.save(store, key)
-  local function wrote(name, value)
-    store:set(name, "String", value)
-    local ok, stored = store:read(name, "String")
-    return ok and stored == value
-  end
-  if not wrote("keyOwner", M.PENDING) then return "Couldn't save the key; try again" end
-  if not wrote("personalKey", key) then return "Couldn't save the key; try again" end
-  if not wrote("keyOwner", M.current() or "") then return "Key saved but not tied to this character; Save again" end
+  if not wrote(store, "keyOwner", M.PENDING) then return "Couldn't save the key; try again" end
+  if not wrote(store, "personalKey", key) then return "Couldn't save the key; try again" end
+  if not wrote(store, "keyOwner", M.current() or "") then return "Key saved but not tied to this character; Save again" end
+end
+-- Each manifest server keeps its own key and owner. The selected server's pair stays in
+-- personalKey and keyOwner, so a key saved before servers had their own belongs to the one
+-- selected now; the others wait under these names until their server is chosen again.
+function M.parked(server) return "personalKey_" .. server, "keyOwner_" .. server end
+-- Selects `to`, parking the current pair under `from` and bringing back `to`'s, or none.
+-- Returns nil when switched, or the reason it wasn't. keyOwner holds PENDING from before the
+-- server changes until the new pair is in, so a switch that stops halfway pauses sending
+-- rather than using one server's key on another, or one character's key on another.
+function M.switch(store, from, to)
+  if from == to then return nil end
+  local failed = "Couldn't switch servers; try again"
+  local readKey, key = store:read("personalKey", "String")
+  local readOwner, owner = store:read("keyOwner", "String")
+  if not readKey or not readOwner then return failed end
+  local fromKey, fromOwner = M.parked(from)
+  if key and key ~= "" then
+    if not (wrote(store, fromOwner, M.PENDING) and wrote(store, fromKey, key) and wrote(store, fromOwner, owner or "")) then return failed end
+  elseif not store:forget(fromKey, fromOwner) then return failed end
+  local toKey, toOwner = M.parked(to)
+  local readSaved, saved = store:read(toKey, "String")
+  local readSavedOwner, savedOwner = store:read(toOwner, "String")
+  if not readSaved or not readSavedOwner then return failed end
+  -- An empty owner reads as unbound, the same as none.
+  local function undo() store:set("keyOwner", "String", owner or "") end
+  if not wrote(store, "keyOwner", M.PENDING) then undo(); return failed end
+  if not wrote(store, "server", to) then undo(); return failed end
+  -- A parked key always has an owner; if that went missing, Save settles it.
+  local loaded
+  if saved and saved ~= "" then
+    loaded = wrote(store, "personalKey", saved) and wrote(store, "keyOwner", savedOwner or M.PENDING)
+  else loaded = store:forget() end
+  if not loaded then return "Server changed but its key didn't load; save the key again" end
+  -- The pair now lives only in personalKey and keyOwner, so Forget leaves no copy behind.
+  store:forget(toKey, toOwner)
 end
 return M

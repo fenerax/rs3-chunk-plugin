@@ -151,8 +151,15 @@ function M.new(store, callbacks, options)
       local label=page:AddText("Server: "..store:get("server","String","scratch"))
       -- Plain buttons, not a combo box: the combo box opened empty in the beta settings layer.
       for i,name in ipairs(names) do
+        -- Each server has its own saved key; see identity.switch.
         page:AddSimpleButton(name,function()
-          store:set("server","String",name); label.content="Server: "..name; callbacks.connectionChanged()
+          local from=store:get("server","String","scratch")
+          local failed=identity.switch(store,from,name); callbacks.connectionChanged()
+          local saved=store:get("personalKey","String","")
+          label.content="Server: "..store:get("server","String","scratch")
+          if self.keyStatus then self.keyStatus.content=keyLine(saved) end
+          if failed then self:message(failed)
+          elseif from~=name then self:message(saved~="" and ("Using the key saved for "..name) or ("No key saved for "..name.." yet; paste it and Save")) end
         end,{inline=i>1})
       end
     end)
@@ -181,7 +188,9 @@ function M.new(store, callbacks, options)
       end)
       page:AddSimpleButton("Test connection",function() callbacks.test(function(message) self:message(message) end) end,{inline=true})
       page:AddSimpleButton("Forget key",function()
-        local forgotten=store:forget(); if key then key:SetText("",false) end; callbacks.connectionChanged()
+        -- Only this server's key; a parked copy of it would come back on the next switch.
+        local forgotten=store:forget() and store:forget(identity.parked(store:get("server","String","scratch")))
+        if key then key:SetText("",false) end; callbacks.connectionChanged()
         self:message(forgotten and "Key forgotten" or "Couldn't remove the key; try again")
         if forgotten and self.keyStatus then self.keyStatus.content=keyLine("") end
       end,{inline=true})

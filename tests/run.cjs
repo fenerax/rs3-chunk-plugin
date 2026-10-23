@@ -24,7 +24,7 @@ function syntax(dir) {
 }
 syntax(path.join(root,'plugins')); syntax(__dirname);
 console.log(`Fengari syntax: ${count} Lua files passed`);
-for (const file of ['core.lua','progress.lua','shading.lua','tasks.lua','achievements.lua','lifecycle.lua']) {
+for (const file of ['core.lua','progress.lua','shading.lua','tasks.lua','achievements.lua','serverkeys.lua','lifecycle.lua']) {
   const L=state();
   if(lauxlib.luaL_dofile(L,to_luastring(path.join(__dirname,file)))) throw Error(`${file}: ${to_jsstring(lua.lua_tostring(L,-1))}`);
   lua.lua_close(L);

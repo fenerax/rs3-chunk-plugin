@@ -108,6 +108,14 @@ key.content='synthetic'; save.action(); assert(values.personalKey=='synthetic');
 local function keyStatus() for _,c in ipairs(settings.children) do if (c.content or ''):find('^Personal key:') then return c.content end end end
 assert(keyStatus()=='Personal key: saved, ends etic', keyStatus()) -- the status line follows a Save
 assert(values.keyOwner=='Alpha') -- saved on this character
+-- Each server button brings back that server's own key, or none.
+local function pick(name) for _,c in ipairs(settings.children) do if c.content==name and c.action then c.action() end end end
+local function said(text) for _,c in ipairs(settings.children) do if (c.content or ''):find(text,1,true) then return true end end end
+pick('home'); assert(values.server=='home' and values.personalKey==nil and keyStatus()=='Personal key: not saved', keyStatus())
+assert(said('No key saved for home yet'))
+key.content='homekey'; save.action(); assert(values.personalKey=='homekey' and values.keyOwner=='Alpha')
+pick('scratch'); assert(values.personalKey=='synthetic' and values.keyOwner=='Alpha' and keyStatus()=='Personal key: saved, ends etic', keyStatus())
+assert(said('Using the key saved for scratch') and values.personalKey_home=='homekey')
 allowed=true; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
 test.action(); assert(#requests==1 and requests[1].path=='/api/plugin/v1/status')
 requests[1].callback({responseCode=200,data='{"state":"unknown"}'})
@@ -183,7 +191,14 @@ test.action(); req=requests[#requests]
 allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=false}); assert(req.cancelled)
 req.callback({responseCode=200,data='{"state":"unlocked","chunkId":"13613"}'})
 forget.action(); assert(values.personalKey==nil and values.keyOwner==nil); assert(keyStatus()=='Personal key: not saved', keyStatus())
+assert(values.personalKey_home=='homekey') -- Forget leaves the other server's key
 emit('ContentLayerReady',{component=root}); assert(views[#views].children[1].content=='Diagnostics')
+local keysLine
+for _,c in ipairs(views[#views].children) do
+  local text=c.content or ''; assert(not text:find('homekey') and not text:find('synthetic'),'a key value in diagnostics')
+  if text:find('^Keys by server:') then keysLine=text end
+end
+assert(keysLine=='Keys by server: home=set, scratch=not set',keysLine)
 local function panelWindow()
   for i=#windows,1,-1 do local t=windows[i].title or ''; if t=='Chunk Picker' or t:find(' · ') then return windows[i] end end
 end
