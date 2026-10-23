@@ -93,7 +93,7 @@ function M.new(options)
     self:cancel(); self.blocked=false; self.nextAt=0; self.failures=0; self.status=nil; self.lastSync=nil
     self.message="Not connected"
     self.heldQuestJSON=nil; self.payloadWarning=nil
-    self.tasks=nil; self.tasksNextAt=0; self.tasksMessage=nil
+    self.tasks=nil; self.tasksNextAt=0; self.tasksMessage=nil; self.tasksNoPaging=nil
   end
   function self:filterQuests(quests)
     if quests and self.heldQuestJSON==json.encode(quests) then return nil end
@@ -124,11 +124,15 @@ function M.new(options)
       if code>0 then self.localhostConnected=true end
       local date=M.dateEpoch(header(r,"Date")); if date then self.clockEpoch=date; self.clockAt=current end
       local ok,status=pcall(json.decode,r.data or "")
-      if path==M.TASKS then
+      if path and path:sub(1,#M.TASKS)==M.TASKS then
         -- Task lists have their own retry clock and never change the connection state: an older
         -- picker without this route answers 401, which must not block reports.
         local list=ok and code>=200 and code<300 and not r.failed and not r.timedOut and taskList(status) or nil
+        -- A picker that can't page (or a client that mangles the query) falls back to the first rows.
+        local askedFrom=path~=M.TASKS
+        if list and self.tasksNoPaging then list.allFrom=nil end
         if list then self.tasks=list; self.tasksAt=current; self.tasksMessage=nil
+        elseif askedFrom and code~=429 then self.tasksNoPaging=true; self.tasksNextAt=current
         elseif code==401 or code==404 then self.tasksMessage="this picker has no in-game task list"; self.tasksNextAt=current+300
         elseif code==429 then self.tasksMessage="picker asked to slow down"; self.tasksNextAt=current+(tonumber(header(r,"Retry-After")) or 60)
         else self.tasksMessage="task list unavailable, retrying"; self.tasksNextAt=current+30 end
@@ -162,9 +166,11 @@ function M.new(options)
   end
   function self:test(now,handle,key,done) return self:requestHTTP(now,handle,key,"GET",nil,done) end
   function self:tasksDue(now) return now>=(self.tasksNextAt or 0) end
-  function self:fetchTasks(now,handle,key,done)
+  -- `from` > 0 asks for "All active" rows past the first reply; sent only to pickers that page.
+  function self:fetchTasks(now,handle,key,done,from)
     if not self:tasksDue(now) then return false end
-    return self:requestHTTP(now,handle,key,"GET",nil,done,M.TASKS)
+    local paged=math.type(from)=="integer" and from>0 and not self.tasksNoPaging
+    return self:requestHTTP(now,handle,key,"GET",nil,done,paged and (M.TASKS.."?from="..from) or M.TASKS)
   end
   function self:report(now,handle,key,world,position,skills,quests,done,diagnostics,achievements)
     local epoch=self:epoch(now)

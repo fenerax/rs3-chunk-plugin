@@ -13,7 +13,8 @@ local netModule=require("net")
 local tasksModule=require("tasks")
 local tasksWindow=tasksModule.new(store)
 -- When the task list was last asked for, and for which reported chunk.
-local tasksAt,tasksChunk=-1000,nil
+-- tasksFrom is the "All active" row it started at.
+local tasksAt,tasksChunk,tasksFrom=-1000,nil,0
 local now, alive, position, reason, playing=0,true,nil,"Waiting for login",false
 local subscriptions, warned={},{}
 local net=netModule.new({sequence=store:get("sequence","Int",0),now=function() return now end,
@@ -200,9 +201,13 @@ subscribe("ServerLogic",function()
   elseif handle and tasksWindow:isOpen() and net:ready(now) and net:tasksDue(now) then
     -- "Here" follows the chunk the picker last accepted, so refresh soon after a report moves it.
     local chunk=net.status and net.status.chunkId
-    if tasksWindow.wanted or now-tasksAt>=tasksModule.REFRESH or (chunk~=tasksChunk and now-tasksAt>=tasksModule.MIN_GAP) then
+    -- More/Back past the rows held asks for that page at once; a repeat of the same ask waits.
+    local want=tasksWindow.wantFrom
+    if tasksWindow.wanted or now-tasksAt>=tasksModule.REFRESH or (chunk~=tasksChunk and now-tasksAt>=tasksModule.MIN_GAP)
+      or (want and (want~=tasksFrom or now-tasksAt>=tasksModule.MIN_GAP)) then
       tasksWindow.wanted=nil; tasksAt=now; tasksChunk=chunk
-      net:fetchTasks(now,handle,key,function() render() end)
+      tasksFrom=want or (net.tasks and net.tasks.allFrom) or 0
+      net:fetchTasks(now,handle,key,function() render() end,tasksFrom)
     end
   end
   shading:update(position,net.status,now); shading:marker()
