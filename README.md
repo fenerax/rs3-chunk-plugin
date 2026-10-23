@@ -18,10 +18,10 @@ RuneScape is a trademark of Jagex Ltd.
 - **Panel:** your chunk ID and name, and whether the picker has it **Unlocked**,
   **Locked** or **Can be picked next**. It also shows your partner's chunk and a
   waiting roll when the picker has them. Drag the title bar; **- / +** collapses it.
-- **Chunk shading:** a red line and a low translucent wall where a locked chunk
-  meets one you can walk in (amber for chunks you can pick next), and fainter
-  lines on the rest of the chunk grid nearby. Colours and styles are in Settings,
-  and a look can be shared as a short code.
+- **Chunk shading:** a red line where a locked chunk meets one you can walk in
+  (amber for chunks you can pick next), fainter lines on the rest of the chunk
+  grid nearby, and a dark haze over locked chunks. Colours, fills and optional
+  glow walls are in Settings, and a look can be shared as a short code.
 - **Locked-chunk warning:** a notice when you walk into a locked chunk, and when
   a roll is waiting.
 - **Chunk tasks window:** **Here** lists the active tasks in your current chunk;

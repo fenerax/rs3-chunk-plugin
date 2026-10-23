@@ -15,7 +15,8 @@ eq(shading.rows({chunkId='13613',state='unlocked'}),nil); eq(shading.rows(nil),n
 eq(shading.rows({chunkId='13613',state='locked',nearby={[NARDAH]='unlocked'}})[NARDAH],'unlocked')
 
 local flat=function() return 1000 end
-local nofill=shading.style(function(key,_,default) if key:find('^shadeFill') and key~='shadeFillStrength' then return 'off' end return default end)
+-- Walls are off by default; these geometry checks turn them on (low) to cover them.
+local nofill=shading.style(function(key,_,default) if key=='shadeWalls' then return 'low' end if key:find('^shadeFill') and key~='shadeFillStrength' then return 'off' end return default end)
 local function validate(g)
   local n=#g.positions; eq(#g.rgba,n); eq(#g.lines%2,0); eq(#g.tris%3,0)
   for _,i in ipairs(g.lines) do assert(math.type(i)=='integer' and i>=0 and i<n) end
@@ -61,14 +62,15 @@ end)
 eq(style.width,3); eq(style.wall,0); eq(style.grid,false); eq(style.rgb[2],0x2F80FF)
 g=shading.geometry(block,flat,style); validate(g); eq(#g.tris,0); eq(g.walls,0); eq(g.edges,4) -- only the boundary edges
 for i in ipairs(g.positions) do eq(g.rgba[i]>>8,0x2F80FF) end
-eq(shading.style().key,'classic/normal/low/true/dark/tint/medium/haze////outline/3065014')
+eq(shading.style().key,'classic/normal/off/true/dark/tint/strong/haze////outline/3065014')
+eq(shading.style().wall,0); eq(shading.style().fillAlpha,shading.FILL_ALPHA.strong)
 -- Look codes: defaults, a custom look round-trips, and broken codes change nothing.
 local lookcode=require('lookcode')
-eq(lookcode.encode(function(_,_,default) return default end),'CP1.cnldtmho1.-.-.-.-.-')
+eq(lookcode.encode(function(_,_,default) return default end),'CP1.cnodtsho1.-.-.-.-.-')
 local saved={shadeColours='custom',shadeRgbLocked='#112233',shadeRgbRollable='#445566',shadeWidth='thick',shadeGrid=false,
   shadeFillLocked='grey',shadePartner='tint',shadeRgbPartner='#abcdef'}
 local code=lookcode.encode(function(key,_,default) local v=saved[key]; if v==nil then return default end; return v end)
-eq(code,'CP1.xklgtmht0.112233.445566.-.-.ABCDEF')
+eq(code,'CP1.xkogtsht0.112233.445566.-.-.ABCDEF')
 local applied={}; for _,e in ipairs(lookcode.decode(' '..code..' ')) do applied[e[1]]=e[3] end
 eq(applied.shadeColours,'custom'); eq(applied.shadeWidth,'thick'); eq(applied.shadeGrid,false); eq(applied.shadeRgbPartner,'#ABCDEF')
 eq(applied.shadeRgbFillLocked,'')
@@ -81,6 +83,7 @@ eq(duo[NARDAH],'unlocked'); eq(duo[NARDAH+1],'partner'); eq(duo[NARDAH-1],'unloc
 -- Outline (default): one line where your open chunk meets the partner's, in the partner colour, no wall.
 local function partnerStyle(mode) return shading.style(function(key,_,default)
   if key=='shadePartner' then return mode end
+  if key=='shadeWalls' then return 'low' end
   if key:find('^shadeFill') and key~='shadeFillStrength' then return 'off' end return default end) end
 g=shading.geometry({[NARDAH]='unlocked',[NARDAH+1]='partner'},flat,partnerStyle('outline')); validate(g)
 eq(g.edges,1); eq(g.walls,0); eq(#g.tris,0); for i in ipairs(g.positions) do eq(g.rgba[i]>>8,shading.PARTNER) end
@@ -99,10 +102,10 @@ local custom=shading.style(function(key,_,default) return ({shadeColours='custom
 eq(custom.rgb[2],0x112233); eq(custom.rgb[1],0x445566); eq(custom.fill.locked,0x778899); eq(custom.fill.available,0xAABBCC)
 assert(custom.key:find('1122867,4478310',1,true) and custom.key:find('7833753',1,true))
 local broken=shading.style(function(key,_,default) return ({shadeColours='custom',shadeFillLocked='custom',shadeRgbFillLocked='nope'})[key] or default end)
-eq(broken.rgb[2],0xFF3B30); eq(broken.fill.locked,0); eq(shading.style().wall,shading.WALL)
+eq(broken.rgb[2],0xFF3B30); eq(broken.fill.locked,0); eq(shading.style().wall,0)
 -- Fills: locked chunks grey, rollable ones in their border colour, unlocked and unknown never.
 local fills={[NARDAH]='unlocked',[NARDAH+1]='locked',[NARDAH+2]='available',[NARDAH+3]='unknown'}
-local ground=shading.style(function(key,_,default) return ({shadeFillStyle='ground',shadeFillLocked='grey'})[key] or default end)
+local ground=shading.style(function(key,_,default) return ({shadeFillStyle='ground',shadeFillLocked='grey',shadeFillStrength='medium'})[key] or default end)
 g=shading.geometry(fills,flat,ground); validate(g); eq(g.fills,2)
 local seen={}
 for i in ipairs(g.positions) do if g.positions[i][2]==1000+shading.FILL_LIFT then seen[g.rgba[i]]=(seen[g.rgba[i]] or 0)+1 end end
@@ -152,7 +155,7 @@ World={IsRegion=function() return region end,GetGroundHeight=function(level,x,z)
   if level~=0 then return -1,false end
   return 1200,true
 end}
-local enabled,chosen=true,{}
+local enabled,chosen=true,{shadeWalls='low'}
 local s=shading.new({enabled=function() return enabled end,
   style=function() return shading.style(function(key,_,default) return chosen[key] or default end) end})
 local pos={x=53,z=45,floor=0}

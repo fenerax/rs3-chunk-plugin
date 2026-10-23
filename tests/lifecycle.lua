@@ -174,7 +174,7 @@ click('Red and amber'); assert(values.shadeColours=='classic')
 -- A partner's look code applies; nonsense is refused with a message.
 local codeField
 for _,c in ipairs(settings.children) do if c.placeholder and c.placeholder:find('Look code') then codeField=c end end
-assert(codeField.content:find('^CP1%.cklx'),codeField.content) -- thick width from earlier
+assert(codeField.content:find('^CP1%.ckox'),codeField.content) -- thick width from earlier
 codeField.content='nope'; click('Use look code'); assert(values.shadeColours=='classic')
 codeField.content='CP1.bnldtmho1.-.-.-.-.-'; click('Use look code'); assert(values.shadeColours=='colourblind' and values.shadeWidth=='normal')
 assert(codeField.content=='CP1.bnldtmho1.-.-.-.-.-')

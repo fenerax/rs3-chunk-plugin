@@ -36,14 +36,15 @@ function M.style(get)
   local customLocked, customRollable = M.hex(get("shadeRgbLocked", "String", "")), M.hex(get("shadeRgbRollable", "String", ""))
   if not (M.COLOURS[colours] or colours == "custom" and customLocked and customRollable) then colours = "classic" end
   local width = get("shadeWidth", "String", "normal"); if not M.WIDTHS[width] then width = "normal" end
-  local walls = get("shadeWalls", "String", "low"); if not M.WALLS[walls] then walls = "low" end
+  -- Off by default: on beta walls over a haze box looked odd. Strong haze reads as greyed out.
+  local walls = get("shadeWalls", "String", "off"); if not M.WALLS[walls] then walls = "off" end
   local grid = get("shadeGrid", "Bool", true) ~= false
   local fillLocked, fillRollable = M.hex(get("shadeRgbFillLocked", "String", "")), M.hex(get("shadeRgbFillRollable", "String", ""))
   local locked = get("shadeFillLocked", "String", "dark")
   if not (M.FILLS[locked] or locked == "tint" or locked == "off" or locked == "custom" and fillLocked) then locked = "dark" end
   local rollable = get("shadeFillRollable", "String", "tint")
   if not (rollable == "same" or rollable == "tint" or rollable == "off" or rollable == "custom" and fillRollable) then rollable = "tint" end
-  local strength = get("shadeFillStrength", "String", "medium"); if not M.FILL_ALPHA[strength] then strength = "medium" end
+  local strength = get("shadeFillStrength", "String", "strong"); if not M.FILL_ALPHA[strength] then strength = "strong" end
   local shape = get("shadeFillStyle", "String", "haze"); if shape ~= "ground" then shape = "haze" end
   local partner = get("shadePartner", "String", "outline"); if not M.PARTNER_MODES[partner] then partner = "outline" end
   local partnerRgb = M.hex(get("shadeRgbPartner", "String", "")) or M.PARTNER
