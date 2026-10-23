@@ -6,10 +6,10 @@ M.PREFIX = "CP1"
 M.CHOICES = {
   {"shadeColours", {classic="c", colourblind="b", subtle="s", custom="x"}, "classic"},
   {"shadeWidth", {thin="t", normal="n", thick="k"}, "normal"},
-  {"shadeWalls", {off="o", low="l", tall="t"}, "low"},
+  {"shadeWalls", {off="o", low="l", tall="t"}, "off"},
   {"shadeFillLocked", {dark="d", grey="g", tint="t", off="o", custom="x"}, "dark"},
   {"shadeFillRollable", {tint="t", same="s", off="o", custom="x"}, "tint"},
-  {"shadeFillStrength", {light="l", medium="m", strong="s", solid="d"}, "medium"},
+  {"shadeFillStrength", {light="l", medium="m", strong="s", solid="d"}, "strong"},
   {"shadeFillStyle", {haze="h", ground="g"}, "haze"},
   {"shadePartner", {outline="o", tint="t", off="f"}, "outline"},
 }
