@@ -108,6 +108,14 @@ key.content='synthetic'; save.action(); assert(values.personalKey=='synthetic');
 local function keyStatus() for _,c in ipairs(settings.children) do if (c.content or ''):find('^Personal key:') then return c.content end end end
 assert(keyStatus()=='Personal key: saved, ends etic', keyStatus()) -- the status line follows a Save
 assert(values.keyOwner=='Alpha') -- saved on this character
+-- Each server button brings back that server's own key, or none.
+local function pick(name) for _,c in ipairs(settings.children) do if c.content==name and c.action then c.action() end end end
+local function said(text) for _,c in ipairs(settings.children) do if (c.content or ''):find(text,1,true) then return true end end end
+pick('home'); assert(values.server=='home' and values.personalKey==nil and keyStatus()=='Personal key: not saved', keyStatus())
+assert(said('No key saved for home yet'))
+key.content='homekey'; save.action(); assert(values.personalKey=='homekey' and values.keyOwner=='Alpha')
+pick('scratch'); assert(values.personalKey=='synthetic' and values.keyOwner=='Alpha' and keyStatus()=='Personal key: saved, ends etic', keyStatus())
+assert(said('Using the key saved for scratch') and values.personalKey_home=='homekey')
 allowed=true; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
 test.action(); assert(#requests==1 and requests[1].path=='/api/plugin/v1/status')
 requests[1].callback({responseCode=200,data='{"state":"unknown"}'})
@@ -183,7 +191,14 @@ test.action(); req=requests[#requests]
 allowed=false; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=false}); assert(req.cancelled)
 req.callback({responseCode=200,data='{"state":"unlocked","chunkId":"13613"}'})
 forget.action(); assert(values.personalKey==nil and values.keyOwner==nil); assert(keyStatus()=='Personal key: not saved', keyStatus())
+assert(values.personalKey_home=='homekey') -- Forget leaves the other server's key
 emit('ContentLayerReady',{component=root}); assert(views[#views].children[1].content=='Diagnostics')
+local keysLine
+for _,c in ipairs(views[#views].children) do
+  local text=c.content or ''; assert(not text:find('homekey') and not text:find('synthetic'),'a key value in diagnostics')
+  if text:find('^Keys by server:') then keysLine=text end
+end
+assert(keysLine=='Keys by server: home=set, scratch=not set',keysLine)
 local function panelWindow()
   for i=#windows,1,-1 do local t=windows[i].title or ''; if t=='Chunk Picker' or t:find(' · ') then return windows[i] end end
 end
@@ -259,6 +274,43 @@ assert(tall~=tw and tw.destroyed and tall.options.width==520 and #tall.children=
 assert(values.tasksW==520 and values.tasksH==tasks.CHROME+20*tasks.ROW and tall.children[7].content=='Extra · Visit Nardah')
 assert(tasks.rowsFor(0)==tasks.MIN_ROWS and tasks.rowsFor(5000)==tasks.MAX_ROWS)
 tw=tall
+-- A picker that pages: More past the rows held asks for them with ?from= at once.
+local function paged(from,total)
+  local rows={}
+  for i=from+1,math.min(from+tasks.CHUNK,total) do rows[#rows+1]='{"id":"t'..i..'","label":"Task '..i..'","category":"Skills"}' end
+  return {responseCode=200,data='{"v":1,"ready":true,"stale":false,"stateRevision":5,"chunkId":"13613","hereKnown":true,"here":[],"hereCount":0,'..
+    '"all":['..table.concat(rows,',')..'],"allFrom":'..from..',"allCount":'..total..'}'}
+end
+-- Answers reports until the window asks for its list; returns that request and the seconds it took.
+local function taskAsk()
+  local seen=#requests
+  for step=1,30 do
+    emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic')
+    while seen<#requests do
+      seen=seen+1; local r=requests[seen]
+      if r.path:find('^/api/plugin/v1/tasks') then return r,step end
+      r.callback({responseCode=200,data='{"state":"locked","chunkId":"13613"}'})
+    end
+  end
+  error('the window never asked for its tasks')
+end
+local function press(n,button) for _=1,n do tw.children[button].action() end; emit('Draw',{timeDeltaSecs=1.1}); emit('Logic') end
+local ask,steps=taskAsk(); assert(ask.path=='/api/plugin/v1/tasks'); ask.callback(paged(0,124)); emit('Logic')
+assert(tw.children[5].content=='All active: 124 · page 1/7' and tw.children[6].content=='Skills · Task 1',tw.children[5].content)
+press(4,4); assert(tw.children[5].content=='All active: 124 · page 5/7' and tw.children[25].content=='Skills · Task 100')
+press(1,4); assert(tw.children[5].content=='All active: 124 · page 6/7 · loading…' and tw.children[6].content=='',tw.children[5].content)
+ask,steps=taskAsk(); assert(ask.path=='/api/plugin/v1/tasks?from=100' and steps<=2,ask.path..' '..steps)
+ask.callback(paged(100,124)); emit('Logic')
+assert(tw.children[6].content=='Skills · Task 101' and tw.children[25].content=='Skills · Task 120')
+press(1,4); assert(tw.children[5].content=='All active: 124 · page 7/7' and tw.children[9].content=='Skills · Task 124' and tw.children[10].content=='')
+-- Back past the rows held asks for the rows ending at that page.
+press(2,3); ask=taskAsk(); assert(ask.path=='/api/plugin/v1/tasks',ask.path); ask.callback(paged(0,124)); emit('Logic')
+assert(tw.children[5].content=='All active: 124 · page 5/7' and tw.children[6].content=='Skills · Task 81')
+-- A refused ?from= (older picker, or a client that drops the query) falls back to the first 100.
+press(1,4); ask=taskAsk(); assert(ask.path=='/api/plugin/v1/tasks?from=100'); ask.callback({responseCode=400,data='{"message":"no"}'})
+ask=taskAsk(); assert(ask.path=='/api/plugin/v1/tasks',ask.path); ask.callback(paged(0,124)); emit('Logic')
+assert(tw.children[5].content=='All active: 124 · page 5/5 · first 100',tw.children[5].content)
+reports=#requests
 -- No new request inside the refresh interval; a picker without the route never blocks reports.
 emit('ServerLogic'); assert(#requests==reports)
 emit('Draw',{timeDeltaSecs=16}); emit('ServerLogic')

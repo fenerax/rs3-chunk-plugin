@@ -56,9 +56,10 @@ RuneScape is a trademark of Jagex Ltd.
    client restarts. **Diagnostics** shows `http=true` once it worked. For chatbox
    notices, do the same with `chatAccess`.
 6. In the picker, open **More → Game plugin** and create a plugin key. In the
-   game, open **Chunk Picker** in the Plugin Hub's Settings, paste the key, choose
-   the server (**home** is a picker on `127.0.0.1:8789`) and click **Save**, then
-   **Test connection**.
+   game, open **Chunk Picker** in the Plugin Hub's Settings, choose the server
+   (**home** is a picker on `127.0.0.1:8789`), paste the key and click **Save**,
+   then **Test connection**. Each server keeps its own key, so choosing another
+   server brings back the key saved for it, or asks for one.
 
 Reload with `prl chunk-picker`; turn it off with `poff chunk-picker`. Without a
 key, the panel still shows your chunk (Lumbridge is **12850**, Nardah **13613**).
@@ -76,9 +77,10 @@ picker on another port, add it there.
   switch in Settings; position goes with every report. It never reads the bank. It sends no
   account name, character name or world number.
 - The key is kept in the plugin's local storage, which the game does not document
-  as encrypted. **Forget key** removes it; revoke it in the picker as well.
-- That storage is shared by every character on the PC, so the key remembers the
-  character it was saved on. On any other character the plugin stops sending
+  as encrypted. **Forget key** removes the selected server's key; revoke it in
+  the picker as well.
+- That storage is shared by every character on the PC, so each server's key
+  remembers the character it was saved on. On any other character the plugin stops sending
   and says so, until you click **Use key on this character** in Settings. The
   character name stays on your PC.
 - Diagnostics show which settings are present, never their values.

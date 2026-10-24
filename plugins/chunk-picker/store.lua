@@ -25,12 +25,14 @@ function M.new(db)
     return ok, value
   end
   -- The owner goes only once the key is confirmed gone, so a failed delete can't leave an
-  -- unbound key behind for the next character to pick up.
-  function self:forget()
-    pcall(function() self.db:Delete("personalKey") end)
-    local ok, exists = pcall(function() return self.db:CheckExists("personalKey") end)
+  -- unbound key behind for the next character to pick up. Names default to the selected
+  -- server's pair; identity.parked names another server's.
+  function self:forget(keyName, ownerName)
+    keyName, ownerName = keyName or "personalKey", ownerName or "keyOwner"
+    pcall(function() self.db:Delete(keyName) end)
+    local ok, exists = pcall(function() return self.db:CheckExists(keyName) end)
     if not ok or exists then return false end
-    pcall(function() self.db:Delete("keyOwner") end)
+    pcall(function() self.db:Delete(ownerName) end)
     return true
   end
   function self:present(key)

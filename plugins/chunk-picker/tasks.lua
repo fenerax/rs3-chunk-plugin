@@ -1,6 +1,8 @@
 -- In-game active tasks: "Here" (the chunk you're in) and "All active", read from the list the
 -- picker last saved. The picker never calculates tasks for this window.
-local M = {ROWS = 12, REFRESH = 15, MIN_GAP = 3, WIDTH = 360}
+-- CHUNK is the most "All active" rows one reply carries; pickers that send `allFrom` give the rest
+-- through `?from=`.
+local M = {ROWS = 12, REFRESH = 15, MIN_GAP = 3, WIDTH = 360, CHUNK = 100}
 -- Resizable: a taller window shows more rows per page. CHROME is the title bar, buttons and header.
 M.CHROME, M.ROW, M.MIN_W, M.MIN_ROWS, M.MAX_ROWS = 112, 18, 300, 3, 40
 function M.rowsFor(height) return math.max(M.MIN_ROWS, math.min(M.MAX_ROWS, math.floor((height - M.CHROME) / M.ROW))) end
@@ -20,16 +22,22 @@ local function rows(list, max)
   return out
 end
 -- Response body -> plain table, or nil when it isn't a v1 task list. Bad rows are dropped.
+-- `allFrom` (nil from older pickers) is where `all` starts; `allHeld` counts the rows as sent, so a
+-- dropped row can't make the window ask for the same rows again.
 function M.list(data)
   if type(data) ~= "table" or data.v ~= 1 or type(data.ready) ~= "boolean" then return nil end
   return {ready = data.ready, stale = data.stale == true, hereKnown = data.hereKnown == true,
-    chunkId = clean(data.chunkId, 12), here = rows(data.here, 50), all = rows(data.all, 100),
+    chunkId = clean(data.chunkId, 12), here = rows(data.here, 50), all = rows(data.all, M.CHUNK),
+    allFrom = math.type(data.allFrom) == "integer" and data.allFrom >= 0 and data.allFrom or nil,
+    allHeld = type(data.all) == "table" and math.min(#data.all, M.CHUNK) or 0,
     hereCount = count(data.hereCount), allCount = count(data.allCount)}
 end
 function M.row(row)
   return (row.category ~= "" and (row.category .. " · ") or "") .. row.label .. (row.level and (" (" .. row.level .. ")") or "")
 end
 -- The header line and one page of rows for a view ("here" or "all"); `size` rows a page.
+-- When the picker pages ("all" with `allFrom`), pages run over the whole list and a page outside
+-- the rows held returns a fifth value: the `from` to ask for.
 function M.page(list, view, page, message, size)
   size = size or M.ROWS
   if not list then return message or "Loading tasks…", {}, 1, 1 end
@@ -37,19 +45,28 @@ function M.page(list, view, page, message, size)
   local here = view == "here"
   if here and not list.hereKnown then return "Waiting for your location in the picker.", {}, 1, 1 end
   local shown, total = here and list.here or list.all, here and list.hereCount or list.allCount
-  local pages = math.max(1, math.ceil(#shown / size)); page = math.max(1, math.min(page, pages))
-  local out = {}
-  for i = (page - 1) * size + 1, math.min(#shown, page * size) do out[#out + 1] = M.row(shown[i]) end
+  local paged = not here and list.allFrom ~= nil
+  local pages = math.max(1, math.ceil((paged and total or #shown) / size)); page = math.max(1, math.min(page, pages))
+  local out, want = {}, nil
+  local first, last = (page - 1) * size + 1, math.min(paged and total or #shown, page * size)
+  local from = paged and list.allFrom or 0
+  if paged and first <= last and (first <= from or last > from + list.allHeld) then
+    -- Going back asks for the rows that end at this page, so Back doesn't refetch on every press.
+    want = first <= from and math.max(0, last - M.CHUNK) or first - 1
+  else
+    for i = first, last do if shown[i - from] then out[#out + 1] = M.row(shown[i - from]) end end
+  end
   local head
   if total == 0 then head = here and "No active tasks in this chunk." or "No active tasks."
   else
     head = (here and ("Here: " .. total .. (total == 1 and " task" or " tasks")) or ("All active: " .. total))
       .. (pages > 1 and (" · page " .. page .. "/" .. pages) or "")
-      .. (#shown < total and (" · first " .. #shown) or "")
+      .. (not paged and #shown < total and (" · first " .. #shown) or "")
+      .. (want and " · loading…" or "")
   end
   if list.stale then head = head .. " · saved before your last change" end
   if message then head = head .. " · " .. message end
-  return head, out, page, pages
+  return head, out, page, pages, want
 end
 function M.new(store)
   local self = {page = 1, view = store:get("tasksView", "String", "here")}
@@ -116,8 +133,8 @@ function M.new(store)
   end
   function self:render(list, message)
     if not self.window or not self.lines then return end
-    local head, lines, page = M.page(list, self.view, self.page, message, #self.lines)
-    self.page = page
+    local head, lines, page, _, want = M.page(list, self.view, self.page, message, #self.lines)
+    self.page = page; self.wantFrom = want
     pcall(function()
       self.window:SetTitle(self.view == "here" and "Chunk tasks: here" or "Chunk tasks: all active")
       self.head.content = head
