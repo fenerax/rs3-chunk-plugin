@@ -3,8 +3,8 @@
 A RuneScape 3 plugin, written for the official [RuneScape plugin API](https://developer.runescape.com/rs/),
 that connects the game to a running [Chunk Picker for RS3](https://github.com/fenerax/chunk-picker-rs3).
 It shows which chunk you are standing in, shades locked chunks on the ground,
-lists your chunk tasks in game, and reports your levels, quests and completed
-achievements to the picker.
+lists your chunk tasks in game, and reports your levels, quests, completed
+achievements and worn and backpack items to the picker.
 
 **Status: beta.** Unreviewed plugins only run on the RuneScape beta world. This
 plugin has not been submitted to the Plugin Hub. It automates no gameplay and
@@ -30,6 +30,10 @@ RuneScape is a trademark of Jagex Ltd.
   completed achievements (Achievement Diaries included), sent to the picker. The
   picker decides what to do with them; the plugin never unlocks a chunk or ticks
   a task itself. Achievements go only to a picker that says it accepts them.
+- **Item evidence:** what you wear and carry in your backpack (item id, count,
+  slot and name), for the picker to offer item tasks for review. Nothing ticks
+  from items without your say in the picker. Items go only to a picker that says
+  it accepts them.
 
 ## Install (beta world)
 
@@ -66,10 +70,11 @@ picker on another port, add it there.
 
 ## Privacy
 
-- The plugin sends only your position, levels, XP, quest names and your
-  completed achievements (id, name and category), plus a few diagnostic lines
-  about what the plugin could read. Levels, quests and achievements each have
-  their own switch in Settings; position goes with every report. It sends no
+- The plugin sends only your position, levels, XP, quest names, your
+  completed achievements (id, name and category) and your worn and backpack
+  items (id, count, slot and name), plus a few diagnostic lines about what the
+  plugin could read. Levels, quests, achievements and items each have their own
+  switch in Settings; position goes with every report. It never reads the bank. It sends no
   account name, character name or world number.
 - The key is kept in the plugin's local storage, which the game does not document
   as encrypted. **Forget key** removes the selected server's key; revoke it in
@@ -96,7 +101,7 @@ FENGARI_HOME=../lua-harness node tests/run.cjs
 ```
 
 `tests/run.cjs` syntax-checks every Lua file, then runs the core, progress,
-shading, tasks, achievements and event-lifecycle tests. Given a file path, it also writes the
+shading, tasks, achievements, items and event-lifecycle tests. Given a file path, it also writes the
 HTTP requests `net.lua` would send. `tests/scratch-http.mjs` replays those
 requests against a throwaway picker started from a local picker checkout
 (`PICKER_SOURCE`); it never attaches to a running picker.
@@ -106,7 +111,8 @@ requests against a throwaway picker started from a local picker checkout
 The plugin talks to the picker's plugin API v1 with a bearer key:
 
 - `POST /api/plugin/v1/report` sends position, skills and quests, and, when
-  the status lists `achievements` under `accepts`, completed achievements.
+  the status lists `achievements` or `items` under `accepts`, completed
+  achievements and worn and backpack items.
 - `GET /api/plugin/v1/status` returns the current chunk's state, nearby chunk
   states, partners and any waiting roll.
 - `GET /api/plugin/v1/tasks` returns the saved task list.
@@ -120,6 +126,14 @@ minutes. They go in numbered parts of at most 12 KB, one part per report and
 nothing else in it. The picker's status says how many parts it holds, so the
 plugin starts over after a picker restart (at most once a minute) and backs off
 for half an hour if the picker refuses them.
+
+Worn and backpack items are read at login, two seconds after an inventory
+change and every minute. They go after any achievement part, alone in a report,
+when the reading or the worn journal changed. A container the plugin can't read
+is sent as `null`, never as empty. Items worn while the picker wasn't listening
+wait in a journal of at most 32 events in local storage, kept for the character
+the key was saved on, until the picker's status acknowledges them. A refused
+items report waits half an hour.
 
 ### Notes
 

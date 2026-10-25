@@ -470,6 +470,41 @@ config.Achievement.M702={id=1702,name='And one more',category=3,subCategory=-1,p
 local picky=function(b) if b and not b.achievements then return {responseCode=400,data='{"message":"bad position"}'} end return picker(b) end
 pump(900,picky); assert(held.received==held.parts,'parts complete despite ordinary 400s')
 for i=1,702 do config.Achievement['M'..i]=nil end
+-- Worn and backpack items go only to a picker that lists `items`, alone, and stop once acknowledged.
+local function container(id,name) return {slotCount=1,isValid=true,GetSlot=function() return {obj={id=id,name=name},count=1} end} end
+local invs={[93]=container(857,'Yew shortbow'),[94]=container(34830,'Gud raider chainbody')}
+config.Inv={}; Inventory={Find=function(which) return invs[which] end}
+emit('InventoryUpdated',{})
+local function withItems(list) local out={} for _,b in ipairs(list) do if b.items then out[#out+1]=b end end return out end
+-- Long enough to clear the back-off the ordinary 400s above left behind.
+local plain=pump(600,picker)
+assert(#plain>0 and #withItems(plain)==0,'a picker that never listed items gets none')
+local ack
+local function itemPicker(b)
+  if b and b.items then
+    local events=b.items.journal.events
+    ack={snapshot=b.items.snapshot,journal={id=b.items.journal.id,event=events[#events] and events[#events][1] or (ack and ack.journal.event) or 0}}
+  end
+  return {responseCode=200,data=json.encode({state='locked',chunkId='13613',accepts=json.array({'achievements','items'}),achievements=held,items=ack})}
+end
+got=withItems(pump(120,itemPicker)); assert(#got==1,'one items report: '..#got)
+local b=got[1]
+assert(b.skills==nil and b.quests==nil and b.diagnostics==nil and b.achievements==nil,'items travel alone')
+assert(b.items.worn[1][2]==34830 and b.items.backpack[1][2]==857 and #b.items.journal.events==1)
+assert(#withItems(pump(700,itemPicker))==0,'an acknowledged reading is not sent again')
+assert(#json.decode(values.itemJournal).events==0,'acknowledged events leave the journal')
+invs[94]=container(34828,'Gud raider shield'); emit('InventoryUpdated',{})
+got=withItems(pump(30,itemPicker)); assert(#got==1 and got[1].items.journal.events[1][2]==34828,'a change goes soon')
+invs[94]=container(34832,'Gud raider axe'); emit('InventoryUpdated',{})
+local refuse=function(b) return b and b.items and {responseCode=400,data='{"message":"bad field"}'} or itemPicker(b) end
+got={}; for _=1,10 do got=withItems(pump(10,refuse)); if #got>0 then break end end
+assert(#got==1,'the refused reading was offered')
+assert(#withItems(pump(1500,itemPicker))==0,'a refused reading waits half an hour')
+assert(#withItems(pump(400,itemPicker))>=1,'then tries again')
+values.sendItems=false; invs[93]=container(1205,'Adamant dagger'); emit('InventoryUpdated',{})
+assert(#withItems(pump(120,itemPicker))==0,'the setting turns items off')
+values.sendItems=true; assert(#withItems(pump(120,itemPicker))==1,'and back on')
+config.Inv,Inventory=nil,nil
 -- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)

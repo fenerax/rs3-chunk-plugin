@@ -33,10 +33,10 @@ local function header(request, name)
   -- An explicit nil: tonumber() with no argument at all throws.
   return nil
 end
-function M.build(seq,epoch,world,position,skills,quests,diagnostics,achievements)
+function M.build(seq,epoch,world,position,skills,quests,diagnostics,achievements,items)
   local p={v=1,seq=seq,sentAt=M.iso(epoch),position={x=position.x,z=position.z,floor=position.floor}}
   if world then p.world=world end
-  p.skills=skills; p.quests=quests; p.achievements=achievements
+  p.skills=skills; p.quests=quests; p.achievements=achievements; p.items=items
   -- Picker contract: at most 80 single lines of up to 160 characters.
   if diagnostics and #diagnostics>0 then
     local lines={}
@@ -172,7 +172,7 @@ function M.new(options)
     local paged=math.type(from)=="integer" and from>0 and not self.tasksNoPaging
     return self:requestHTTP(now,handle,key,"GET",nil,done,paged and (M.TASKS.."?from="..from) or M.TASKS)
   end
-  function self:report(now,handle,key,world,position,skills,quests,done,diagnostics,achievements)
+  function self:report(now,handle,key,world,position,skills,quests,done,diagnostics,achievements,items)
     local epoch=self:epoch(now)
     if not epoch then
       self.message="Checking picker clock"
@@ -185,7 +185,7 @@ function M.new(options)
     if not self:ready(now) then return false end
     self.sequence=math.max(self.sequence+1,math.floor(epoch*1000))
     if options.saveSequence then options.saveSequence(self.sequence) end
-    local body,payload,warning=M.build(self.sequence,epoch,world,position,skills,quests,diagnostics,achievements)
+    local body,payload,warning=M.build(self.sequence,epoch,world,position,skills,quests,diagnostics,achievements,items)
     if quests then
       self.payloadWarning=warning
       self.heldQuestJSON=not payload.quests and json.encode(quests) or nil

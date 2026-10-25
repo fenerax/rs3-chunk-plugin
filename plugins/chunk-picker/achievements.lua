@@ -24,16 +24,18 @@ local function checksum(text)
   return string.format("%08x%08x", math.tointeger(a), math.tointeger(b))
 end
 M.checksum = checksum
--- Names the picker accepts: 1-120 characters, no C0 or C1 controls, cut on a UTF-8 boundary.
-local function clean(name)
+-- Names the picker accepts: 1-120 bytes (or `limit`), no C0 or C1 controls, cut on a UTF-8 boundary.
+local function clean(name, limit)
+  limit = limit or 120
   name = name:gsub("%c", " "):gsub("\xC2[\x80-\x9F]", " "):match("^%s*(.-)%s*$")
-  if #name > 120 then
-    local cut = 120
+  if #name > limit then
+    local cut = limit
     while cut > 0 and (name:byte(cut + 1) or 0) >= 0x80 and name:byte(cut + 1) < 0xC0 do cut = cut - 1 end
     name = name:sub(1, cut):match("^(.-)%s*$")
   end
   if name ~= "" then return name end
 end
+M.clean = clean
 local function category(value)
   local n = type(value) == "number" and math.tointeger(value)
   return n and n >= -1 and n <= MAX_SAFE and n or -1
