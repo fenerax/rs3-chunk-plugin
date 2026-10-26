@@ -1,0 +1,7 @@
+# Synthetic beta session: arrive in Lumbridge, report progress, items, a two-part bank, then move.
+# Every report claims a beta world, so a picker keeps its item evidence in memory and ticks nothing.
+{"world":{"id":1,"beta":true},"position":{"x":50,"z":50,"floor":0},"skills":{"ATTACK":{"level":12,"xp":1584},"WOODCUTTING":{"level":5,"xp":388}},"quests":{"finished":["Cook's Assistant"],"started":[]}}
+{"world":{"id":1,"beta":true},"position":{"x":50,"z":50,"floor":0},"items":{"snapshot":"0123456789abcdef","worn":[[3,1205,1,"Bronze dagger"]],"backpack":[[0,1511,5,"Logs"],[1,590,1,"Tinderbox"]],"pouch":[[0,995,82094,"Coins"]],"toolbelt":[["HATCHET",1],["HATCHET_LEVEL",1],["NOOSE_WAND",1]],"journal":{"id":"fedcba9876543210","events":[[1,1205,"Bronze dagger"]]}}}
+{"world":{"id":1,"beta":true},"position":{"x":50,"z":50,"floor":0},"bank":{"snapshot":"00112233aabbccdd","part":1,"parts":2,"age":0,"rows":[[1511,100],[995,5000],[1277,1]]}}
+{"world":{"id":1,"beta":true},"position":{"x":50,"z":50,"floor":0},"bank":{"snapshot":"00112233aabbccdd","part":2,"parts":2,"age":0,"rows":[[1351,1],[2309,10]]}}
+{"world":{"id":1,"beta":true},"position":{"x":53,"z":45,"floor":0}}

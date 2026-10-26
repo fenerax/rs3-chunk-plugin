@@ -157,6 +157,17 @@ since the plugin last saw the bank open or changed. Once the status names the
 set under `bank`, it isn't sent again unless it changes, the picker forgets it,
 or the bank is seen again ten minutes after the time the picker holds.
 
+### Beta dev tools, replay and the release zip
+
+`dev/` holds testing tools that never ship: a separate beta-only plugin whose
+buttons run Jagex's dev cheat commands (teleport to a chunk, step one chunk
+over, give an item, open the bank), a replay tool that posts recorded reports to
+a picker without the game, and `tools/build-release.mjs`, which builds the
+Plugin Hub zip and refuses probe, test and dev files, cheat commands and
+loopback server URLs. See [dev/README.md](dev/README.md), including the warning
+that Jagex logs cheat commands. `node --test tests/build-release.test.mjs
+tests/replay.test.mjs` tests the two Node tools.
+
 ### Notes
 
 `docs/api-notes.md` collects what we learned about the plugin API on the beta
