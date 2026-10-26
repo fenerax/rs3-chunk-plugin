@@ -140,7 +140,7 @@ function M.new(store, callbacks, options)
   local function connection(page)
     local key
     section("intro",function()
-      page:AddText("Sends your location, levels, quests, completed achievements and worn and backpack items to the picker you choose, and nothing else.")
+      page:AddText("Sends your location, levels, quests, completed achievements and your items (worn, backpack, coin pouch, tool belt and bank) to the picker you choose, and nothing else.")
     end)
     section("server",function()
       local names={}
@@ -208,7 +208,7 @@ function M.new(store, callbacks, options)
       self.result=page:AddText({text="Save your key, then test the connection.",height=48,maxLines=2})
     end)
     section("options",function()
-      checkboxes(page,{{"sendSkills","Send my levels"},{"sendQuests","Send my quests"},{"sendAchievements","Send my achievements"},{"sendItems","Send my worn and backpack items"},{"showPanel","Show panel"},{"beta","Beta world"}},true)
+      checkboxes(page,{{"sendSkills","Send my levels"},{"sendQuests","Send my quests"},{"sendAchievements","Send my achievements"},{"sendItems","Send my items and bank"},{"showPanel","Show panel"},{"beta","Beta world"}},true)
       page:AddText("The picker may tick tasks for achievements you completed and gear you own; other progress waits for review there. Nothing here unlocks a chunk.")
     end)
   end

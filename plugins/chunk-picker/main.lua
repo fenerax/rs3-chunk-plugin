@@ -4,6 +4,7 @@ local location=require("location")
 local progress=require("progress").new()
 local achievements=require("achievements").new()
 local items=require("items").new(store)
+local bank=require("bank").new()
 local sync=require("sync").new()
 local shadingModule=require("shading")
 local shading=shadingModule.new({enabled=function() return store:get("shadeChunks","Bool",true) end,
@@ -56,7 +57,7 @@ local function changed()
   net:reset(); sync:reset()
   -- Resend progress after reconnect/server/world changes; leave its review to the picker.
   if playing then progress:reset(); progress:login(now) end
-  achievements:resend(); items:resend()
+  achievements:resend(); items:resend(); bank:resend()
 end
 -- A send switch is on when saved on or never saved. One that can't be read stays off, so a
 -- storage hiccup never overrides an opt-out.
@@ -73,7 +74,7 @@ local lastDiagnostics,syncNowAt,syncing=nil,-1000,false
 local function syncNow()
   if not playing or now-syncNowAt<10 then return end
   syncNowAt=now; syncing=true
-  progress:reset(); progress:login(now); achievements:readNow(now); items:readNow(now)
+  progress:reset(); progress:login(now); achievements:readNow(now); items:readNow(now); bank:readNow(now); bank:resend()
   sync:force(); lastDiagnostics=nil
 end
 panel=require("panel").new(store,function() end,function() tasksWindow:open() end,syncNow)
@@ -111,7 +112,9 @@ local function diagnosticLines()
     "Panel: "..(panel.error or "ready").."; storage="..tostring(store.writeOK).."; edge resize="..tostring(panel.resizable),
     "Payload: "..(net.payloadWarning or "within 16 KB"),
     "Achievements: "..achievements:describe().."; picker accepts="..tostring(net:accepts("achievements")),
-    "Items: "..items:describe().."; picker accepts="..tostring(net:accepts("items")),
+    "Items: "..items:describe().."; picker accepts="..tostring(net:accepts("items"))
+      .."; pouch="..tostring(net:accepts("pouch")).."; belt="..tostring(net:accepts("toolbelt")),
+    "Bank: "..bank:describe(now).."; picker accepts="..tostring(net:accepts("bank")),
     "Shading: "..shading:describe(),
     "Tasks window: "..tasksWindow:describe(),
     "Locked warning: "..warning:describe(),
@@ -162,7 +165,7 @@ local function render()
   diagnostics:refresh()
 end
 local function enterGame()
-  playing=true; changed(); achievements:login(now); items:login(now); panel:build()
+  playing=true; changed(); achievements:login(now); items:login(now); bank:login(now); panel:build()
 end
 subscribe("SettingsLayerReady",function(e) settings:mount(e.component) end)
 subscribe("ContentLayerReady",function(e) diagnostics:mount(e.component) end)
@@ -178,7 +181,7 @@ subscribe("GameStateChanged",function(e)
   local game=state==30 or (GameState and state==GameState.GAME) or numeric==30
   if game then enterGame()
   else
-    playing=false; syncing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); achievements:reset(); items:reset(); panel:destroy(); tasksWindow:destroy(); warning:reset(); shading:clear("waiting for login")
+    playing=false; syncing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); achievements:reset(); items:reset(); bank:reset(); panel:destroy(); tasksWindow:destroy(); warning:reset(); shading:clear("waiting for login")
   end
 end)
 subscribe("WindowSizeChanged",function() panel:build(); settingsWindow:build() end)
@@ -188,14 +191,14 @@ subscribe("WorldUpdated",function() shading:worldChanged() end)
 subscribe("SkillTransmit",function(e) if playing then progress:skill(e,now) end end)
 subscribe("VarTransmit",function(e) if playing then progress:var(e,now); achievements:var(e,now) end end)
 for _,name in ipairs({"InventoryAdded","InventoryUpdated","InventoryRemoved"}) do
-  subscribe(name,function() if playing then items:inventory(now) end end)
+  subscribe(name,function(e) if playing then items:inventory(now); bank:inventory(e,now) end end)
 end
 subscribe("ServerLogic",function()
   if not playing then
     local ok,available=pcall(Player.IsAvailable)
     if ok and available then enterGame() else return end
   end
-  position,reason=location.read(); sync:observe(position,now); progress:tick(now); achievements:tick(now); items:tick(now); net:tick(now)
+  position,reason=location.read(); sync:observe(position,now); progress:tick(now); achievements:tick(now); items:tick(now); bank:tick(now); net:tick(now)
   local handle,key=connection()
   local skills,quests=progress:pending(now,allowed("sendSkills"),allowed("sendQuests"))
   quests=net:filterQuests(quests)
@@ -204,24 +207,32 @@ subscribe("ServerLogic",function()
   if part then skills,quests=nil,nil end
   -- Items go after achievements, also alone, and only to a picker that lists them.
   local held,heldKey
-  if not part and allowed("sendItems") and net:accepts("items") then held,heldKey=items:pending(now) end
+  if not part and allowed("sendItems") and net:accepts("items") then
+    held,heldKey=items:pending(now,{pouch=net:accepts("pouch"),toolbelt=net:accepts("toolbelt")})
+  end
   if held then skills,quests=nil,nil end
-  if handle and sync:due(now,skills~=nil or quests~=nil or part~=nil or held~=nil) and net:ready(now) then
+  -- Bank parts go last of the three, each alone, under the same items switch.
+  local bankPart=not part and not held and allowed("sendItems") and net:accepts("bank") and bank:pending(now) or nil
+  if bankPart then skills,quests=nil,nil end
+  if handle and sync:due(now,skills~=nil or quests~=nil or part~=nil or held~=nil or bankPart~=nil) and net:ready(now) then
     local reported=position
     -- Diagnostics ride along at most once a minute, never with achievements or items.
-    local lines=not part and not held and (not lastDiagnostics or now-lastDiagnostics>=60) and pickerLines() or nil
+    local lines=not part and not held and not bankPart and (not lastDiagnostics or now-lastDiagnostics>=60) and pickerLines() or nil
     if held then items:sent(heldKey,now) end
     net:report(now,handle,key,world(),reported,skills,quests,function(ok,payload,status,code)
       if ok then
         progress:ack(payload.skills,payload.quests); sync:ack(reported,now)
         if net:accepts("achievements") then achievements:sync(status,now) end
         if net:accepts("items") then items:sync(status,now) end
+        if bankPart then bank:partSent(bankPart,now) end
+        if net:accepts("bank") then bank:sync(status,now) end
         if payload.diagnostics then lastDiagnostics=now end
         -- The ordinary report goes last, after any achievement part and items.
-        if not part and not held then syncing=false; sync:force(false) end
+        if not part and not held and not bankPart then syncing=false; sync:force(false) end
       elseif code==400 and payload and payload.achievements then achievements:refused(now)
-      elseif code==400 and payload and payload.items then items:refused(now) end
-    end,lines,part,held)
+      elseif code==400 and payload and payload.items then items:refused(now)
+      elseif code==400 and payload and payload.bank then bank:refused(now) end
+    end,lines,part,held,bankPart)
   elseif handle and tasksWindow:isOpen() and net:ready(now) and net:tasksDue(now) then
     -- "Here" follows the chunk the picker last accepted, so refresh soon after a report moves it.
     local chunk=net.status and net.status.chunkId

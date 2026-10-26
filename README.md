@@ -4,7 +4,7 @@ A RuneScape 3 plugin, written for the official [RuneScape plugin API](https://de
 that connects the game to a running [Chunk Picker for RS3](https://github.com/fenerax/chunk-picker-rs3).
 It shows which chunk you are standing in, shades locked chunks on the ground,
 lists your chunk tasks in game, and reports your levels, quests, completed
-achievements and worn and backpack items to the picker.
+achievements and items (worn, backpack, coin pouch, tool belt and bank) to the picker.
 
 **Status: beta.** Unreviewed plugins only run on the RuneScape beta world. This
 plugin has not been submitted to the Plugin Hub. It automates no gameplay and
@@ -33,9 +33,16 @@ RuneScape is a trademark of Jagex Ltd.
   picker decides what to do with them; the plugin never unlocks a chunk or ticks
   a task itself. Achievements go only to a picker that says it accepts them.
 - **Item evidence:** what you wear and carry in your backpack (item id, count,
-  slot and name). On a live world the picker ticks best-in-slot gear goals for
-  items you own; other item tasks wait for your review there. Beta worlds never
-  tick. Items go only to a picker that says it accepts them.
+  slot and name), your coin pouch, the tools on your tool belt and your bank.
+  On a live world the picker ticks best-in-slot gear goals for items you own
+  and counts your coins; other item tasks wait for your review there. Beta
+  worlds never tick. Items go only to a picker that says it accepts them, and
+  the coin pouch, tool belt and bank each only to a picker that lists them too.
+- **Bank:** the game only shows the plugin your bank after you open it once
+  each login, and only sees changes while it is open, so a deposit box or porter
+  can change it unseen. The picker shows how long ago the bank was last seen.
+- **Tool belt:** there is no tool belt container, so the plugin reads the
+  game's per-tool variables (`TOOLBELT_*`).
 
 ## Install (beta world)
 
@@ -73,11 +80,12 @@ picker on another port, add it there.
 ## Privacy
 
 - The plugin sends only your position, levels, XP, quest names, your
-  completed achievements (id, name and category) and your worn and backpack
-  items (id, count, slot and name), plus a few diagnostic lines about what the
-  plugin could read. Levels, quests, achievements and items each have their own
-  switch in Settings; position goes with every report. It never reads the bank. It sends no
-  account name, character name or world number.
+  completed achievements (id, name and category), your worn, backpack and coin
+  pouch items (id, count, slot and name), your tool belt tools and your bank
+  (id and count), plus a few diagnostic lines about what the plugin could read.
+  Levels, quests, achievements and items each have their own switch in
+  Settings; the items switch covers the pouch, tool belt and bank. Position goes
+  with every report. It sends no account name, character name or world number.
 - The key is kept in the plugin's local storage, which the game does not document
   as encrypted. **Forget key** removes the selected server's key; revoke it in
   the picker as well.
@@ -113,8 +121,9 @@ requests against a throwaway picker started from a local picker checkout
 The plugin talks to the picker's plugin API v1 with a bearer key:
 
 - `POST /api/plugin/v1/report` sends position, skills and quests, and, when
-  the status lists `achievements` or `items` under `accepts`, completed
-  achievements and worn and backpack items.
+  the status lists `achievements`, `items`, `pouch`, `toolbelt` or `bank` under
+  `accepts`, completed achievements, items, the coin pouch, the tool belt and
+  bank parts.
 - `GET /api/plugin/v1/status` returns the current chunk's state, nearby chunk
   states, partners and any waiting roll.
 - `GET /api/plugin/v1/tasks` returns the saved task list.
@@ -136,6 +145,17 @@ is sent as `null`, never as empty. Items worn while the picker wasn't listening
 wait in a journal of at most 32 events in local storage, kept for the character
 the key was saved on, until the picker's status acknowledges them. A refused
 items report waits half an hour.
+
+The coin pouch (container 623) and tool belt ride in the items report when the
+picker's status lists `pouch` and `toolbelt` under `accepts`. Tool belt rows are
+`[name, value]` for each nonzero `TOOLBELT_<TOOL>` varbit; the list of varbits
+is found once per login. The bank (container 95) is read once it holds items,
+two seconds after an inventory change and every minute. It goes, for a picker
+that lists `bank`, as `[id, count]` rows in up to eight parts of at most 700
+rows and 12 KB, one part per report and nothing else in it, with `age`: seconds
+since the plugin last saw the bank open or changed. Once the status names the
+set under `bank`, it isn't sent again unless it changes, the picker forgets it,
+or the bank is seen again ten minutes after the time the picker holds.
 
 ### Notes
 

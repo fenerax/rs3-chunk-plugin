@@ -143,4 +143,70 @@ invs[93], invs[94] = inv(wide), inv(wide); tracker:readNow(602)
 body = tracker:pending(602); assert(body and #json.encode(body) <= items.MAX_BYTES, "widest containers fit")
 -- Names never carry a NUL into storage.
 assert(not values.itemJournal:find("\0", 1, true))
+-- Tool belt: TOOLBELT_<TOOL> varbits only, bookkeeping left out, nonzero values from 1 to 1000.
+eq(items.beltName("TOOLBELT_NOOSE_WAND"), "NOOSE_WAND"); eq(items.beltName("TOOLBELT_HATCHET_LEVEL"), "HATCHET_LEVEL")
+for _, name in ipairs({"TOOLBELT_RAND_CHISEL", "TOOLBELT_LAST_SLOT", "TOOLBELT_CURRENT_CATEGORY", "TOOLBELT_HATCHET_LEVEL_OLD",
+  "TOOLBELT_BONECRUSHER_BOUGHT", "TOOLBELT_BONECRUSHER_ENABLED", "TOOLBELT_GOLD_ACC", "CHEEVO_TOOLBELT", "TASK_TOOLBELT_ADD_SHEARS",
+  "TOOLBELT_lower", "TOOLBELT_", "TOOLBELT_" .. string.rep("A", 41)}) do
+  eq(items.beltName(name), nil, name)
+end
+local vars = {}
+local function variable(key, name, id, value, varbit) vars[key] = {configName = name, id = id, value = value, isVarBit = varbit} end
+variable(1, "TOOLBELT_NOOSE_WAND", -3008, 1, true); variable(2, "TOOLBELT_HATCHET", -2986, 1, true)
+variable(3, "TOOLBELT_HATCHET_LEVEL", -18523, 6, true); variable(4, "TOOLBELT_HOLY_MOULD", -2973, 0, true)
+variable(5, "TOOLBELT_FREE_TOOLS", 1102, 806354927, false); variable(6, "TOOLBELT_STRUCT", 7863, nil, false)
+variable(7, "TOOLBELT_RAND_HATCHET", -3010, 6, true); variable(8, "TOOLBELT_MATTOCK", -46000, 3, true)
+variable(9, "TOOLBELT_SEXTANT", -686, 5000, true); variable(10, "QUEST_POINTS", 101, 50, false)
+var = {VarPlayer = vars}
+local found = items.beltVars(); eq(#found, 6, "tool varbits")
+eq(json.encode(items.belt(found)), '[["HATCHET",1],["HATCHET_LEVEL",6],["MATTOCK",3],["NOOSE_WAND",1]]', "belt rows")
+-- Each read looks the var up again, so a change shows.
+vars[4] = {configName = "TOOLBELT_HOLY_MOULD", id = -2973, value = 1, isVarBit = true}
+assert(json.encode(items.belt(found)):find('"HOLY_MOULD",1'), "a new tool")
+vars[4] = setmetatable({}, {__index = function() error("gone") end}); eq(items.belt(found), nil, "a throwing value")
+vars[4] = {configName = "TOOLBELT_HOLY_MOULD", id = -2973, value = "x"}; eq(items.belt(found), nil, "a value that isn't a number")
+vars[4] = {configName = "TOOLBELT_HOLY_MOULD", id = -2973, value = 0}
+var = {VarPlayer = {{configName = "QUEST_POINTS", id = 1, value = 3}}}; eq(items.beltVars(), nil, "no tool names is unreadable, not empty")
+var = nil; eq(items.beltVars(), nil, "no var API")
+var = {VarPlayer = vars}
+
+-- Coin pouch and belt ride along only for a picker that accepts them, and change the snapshot.
+values.itemJournal = nil
+invs[93] = inv({slot(995, "Coins", 120)}); invs[94] = inv({slot(1205, "Adamant dagger")})
+invs[623] = inv({slot(995, "Coins", 82094), slot(54830, "Coins (billions)", 2)})
+tracker = items.new(store); tracker:login(700)
+body = tracker:pending(700)
+eq(body.pouch, nil, "no pouch for an older picker"); eq(body.toolbelt, nil, "no belt for an older picker")
+local plainSnapshot = body.snapshot
+body, key = tracker:pending(700, {pouch = true, toolbelt = true})
+eq(json.encode(body.pouch), '[[0,995,82094,"Coins"],[1,54830,2,"Coins (billions)"]]', "pouch rows")
+eq(#body.toolbelt, 4, "belt rows"); assert(body.snapshot ~= plainSnapshot, "the snapshot covers what is sent")
+eq(items.coins(body.pouch), "2000082094", "coins with billions")
+assert(tracker:describe():find("pouch=2000082094 coins; belt=4"), tracker:describe())
+tracker:sent(key, 700)
+tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = body.journal.events[#body.journal.events][1]}}}, 701)
+eq(tracker:pending(702, {pouch = true, toolbelt = true}), nil, "acknowledged")
+-- A tool added to the belt is a new reading.
+vars[4] = {configName = "TOOLBELT_HOLY_MOULD", id = -2973, value = 1, isVarBit = true}
+tracker:readNow(800); body = tracker:pending(800, {pouch = true, toolbelt = true})
+assert(body and #body.toolbelt == 5, "the belt change goes")
+-- An unreadable pouch or belt is null, never empty.
+invs[623] = nil; var = nil
+tracker = items.new(store); tracker:login(900); body = tracker:pending(900, {pouch = true, toolbelt = true})
+eq(body.pouch, json.null); eq(body.toolbelt, json.null); assert(json.encode(body):find('"toolbelt":null'))
+assert(tracker:describe():find("pouch=unreadable; belt=unreadable"), tracker:describe())
+-- The belt search isn't repeated on every read; it tries again after ten minutes.
+var = {VarPlayer = vars}; tracker:readNow(905); eq(tracker.toolbelt, nil, "not searched again yet")
+tracker:readNow(1501); eq(#tracker.toolbelt, 5, "searched again")
+-- Too big with two full containers: the belt goes as unreadable before the whole report is held.
+local beltVars = {}
+for i = 1, 128 do beltVars[i] = {configName = "TOOLBELT_" .. string.rep("T", 36) .. string.format("%04d", i), id = -i, value = 1000, isVarBit = true} end
+var = {VarPlayer = beltVars}
+values.itemJournal = nil; invs[93], invs[94] = inv(wide), inv(wide)
+tracker = items.new(store); tracker:login(2000)
+body, key = tracker:pending(2000, {pouch = true, toolbelt = true})
+assert(body and #json.encode(body) <= items.MAX_BYTES, "within the cap"); eq(body.toolbelt, json.null, "belt dropped")
+tracker:sent(key, 2000); tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = 1000}}}, 2001)
+eq(tracker:pending(2100, {pouch = true, toolbelt = true}), nil, "a trimmed reading, once acknowledged, isn't resent")
+var = nil
 print("items tests passed")
