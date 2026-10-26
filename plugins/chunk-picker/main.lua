@@ -66,7 +66,17 @@ local function world()
   -- beta distinguishes imported/live character copies. No account/character identifier is sent.
   return {id=1,beta=store:get("beta","Bool",true)}
 end
-panel=require("panel").new(store,function() end,function() tasksWindow:open() end)
+-- Sync now reads everything again and reports from the next game tick, without waiting for a
+-- move or the timers. A reading the picker already holds isn't sent twice. Presses count ten
+-- seconds apart, so they stay inside the picker's rate limit.
+local lastDiagnostics,syncNowAt,syncing=nil,-1000,false
+local function syncNow()
+  if not playing or now-syncNowAt<10 then return end
+  syncNowAt=now; syncing=true
+  progress:reset(); progress:login(now); achievements:readNow(now); items:readNow(now)
+  sync:force(); lastDiagnostics=nil
+end
+panel=require("panel").new(store,function() end,function() tasksWindow:open() end,syncNow)
 local settingsCallbacks={
   connectionChanged=changed,
   openWindow=function() settingsWindow:open() end,
@@ -138,13 +148,13 @@ local function pickerLines()
   for _,line in ipairs(shading:debugLines()) do lines[#lines+1]=line end
   return lines
 end
-local lastDiagnostics=nil
 diagnostics=require("diagnostics").new(diagnosticLines)
 local function render()
   local _,_,message=connection()
   local status=not message and net.status or nil
   local text=message or net.message
   if not message and net.lastSync and net.status then text="Synced "..math.floor(now-net.lastSync).." s ago" end
+  if not message and syncing then text="Syncing…" end
   if net.payloadWarning then text=net.payloadWarning end
   local ok=pcall(function() panel:render(position,reason,status,text) end)
   if not ok then panel:destroy(); panel:build() end
@@ -168,7 +178,7 @@ subscribe("GameStateChanged",function(e)
   local game=state==30 or (GameState and state==GameState.GAME) or numeric==30
   if game then enterGame()
   else
-    playing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); achievements:reset(); items:reset(); panel:destroy(); tasksWindow:destroy(); warning:reset(); shading:clear("waiting for login")
+    playing=false; syncing=false; position=nil; reason="Waiting for login"; net:reset(); sync:reset(); progress:reset(); achievements:reset(); items:reset(); panel:destroy(); tasksWindow:destroy(); warning:reset(); shading:clear("waiting for login")
   end
 end)
 subscribe("WindowSizeChanged",function() panel:build(); settingsWindow:build() end)
@@ -207,6 +217,8 @@ subscribe("ServerLogic",function()
         if net:accepts("achievements") then achievements:sync(status,now) end
         if net:accepts("items") then items:sync(status,now) end
         if payload.diagnostics then lastDiagnostics=now end
+        -- The ordinary report goes last, after any achievement part and items.
+        if not part and not held then syncing=false; sync:force(false) end
       elseif code==400 and payload and payload.achievements then achievements:refused(now)
       elseif code==400 and payload and payload.items then items:refused(now) end
     end,lines,part,held)

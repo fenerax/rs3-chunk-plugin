@@ -206,7 +206,7 @@ local old=panelWindow(); root=component(nil,{width=800,height=600}); emit('Windo
 emit('GameStateChanged',{newState=37}); assert(panelWindow().destroyed)
 emit('GameStateChanged',{newState=30}); assert(not panelWindow().destroyed)
 -- Edge resize: the panel rebuilds at a size that has held for a second, and keeps it.
-local pw=panelWindow(); assert(pw.options.resizable and pw.options.width==330 and pw.options.height==236)
+local pw=panelWindow(); assert(pw.options.resizable and pw.options.width==330 and pw.options.height==270)
 pw.root:SetSize(420,300)
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(panelWindow()==pw)
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); local bigger=panelWindow()
@@ -504,6 +504,19 @@ assert(#withItems(pump(400,itemPicker))>=1,'then tries again')
 values.sendItems=false; invs[93]=container(1205,'Adamant dagger'); emit('InventoryUpdated',{})
 assert(#withItems(pump(120,itemPicker))==0,'the setting turns items off')
 values.sendItems=true; assert(#withItems(pump(120,itemPicker))==1,'and back on')
+-- Sync now reads at once and reports from the next tick: here a backpack change the client sent no
+-- event for, then progress with diagnostics. A reading the picker holds isn't sent twice.
+assert(#withItems(pump(30,itemPicker))==0,'no items before the press')
+local function panelButton(label) for _,c in ipairs(panelWindow().children) do if c.content==label then return c end end end
+invs[93]=container(1215,'Dragon dagger')
+panelButton('Sync now').action(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
+assert(panelWindow().children[5].content=='Syncing…',panelWindow().children[5].content)
+local before=#requests; pump(20,itemPicker); got=bodies(before+1)
+assert(got[1].items and got[1].items.backpack[1][2]==1215 and #withItems(got)==1,'the new reading goes first')
+local plainAfter; for i=before+1,#requests do local b=requests[i].body and json.decode(requests[i].body); if b and not b.items and not b.achievements then plainAfter=b end end
+assert(plainAfter and plainAfter.diagnostics and plainAfter.skills,'then progress and diagnostics')
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(panelWindow().children[5].content:find('^Synced'),panelWindow().children[5].content)
+panelButton('Sync now').action(); assert(#withItems(pump(30,itemPicker))==0,'a held reading is not sent twice')
 config.Inv,Inventory=nil,nil
 -- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)

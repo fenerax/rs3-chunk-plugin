@@ -37,8 +37,8 @@ function M.extra(status,showPartner)
   return table.concat(lines,"; ")
 end
 -- Expanded size: the default, and the smallest that still shows every line and the Tasks button.
-M.WIDTH, M.HEIGHT, M.MIN_W, M.MIN_H = 330, 236, 220, 220
-function M.new(store, changed, openTasks)
+M.WIDTH, M.HEIGHT, M.MIN_W, M.MIN_H = 330, 270, 220, 254
+function M.new(store, changed, openTasks, syncNow)
   local self={store=store, positionSaved="not moved", collapsed=store:get("collapsed","Bool",false)}
   function self:savePosition()
     if not self.window then return end
@@ -112,6 +112,7 @@ function M.new(store, changed, openTasks)
         -- In the body, not the title bar: PrettyUI's drag layer covers the title bar up to the
         -- last 34 px and sits in front, so a title button there only ever started a drag.
         if openTasks then w:AddSimpleButton("Tasks",function() openTasks() end,{tooltip="Your active tasks: here and all"}) end
+        if syncNow then w:AddSimpleButton("Sync now",function() syncNow() end,{tooltip="Send your location, progress and items to the picker now"}) end
       end
       self.error=nil
     end)

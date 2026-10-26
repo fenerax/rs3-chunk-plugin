@@ -18,6 +18,8 @@ RuneScape is a trademark of Jagex Ltd.
 - **Panel:** your chunk ID and name, and whether the picker has it **Unlocked**,
   **Locked** or **Can be picked next**. It also shows your partner's chunk and a
   waiting roll when the picker has them. Drag the title bar; **- / +** collapses it.
+  **Sync now** sends a fresh reading straight away instead of waiting for you to
+  move or for the minute timer.
 - **Chunk shading:** a red line where a locked chunk meets one you can walk in
   (amber for chunks you can pick next), fainter lines on the rest of the chunk
   grid nearby, and a dark haze over locked chunks. Colours, fills and optional
@@ -31,9 +33,9 @@ RuneScape is a trademark of Jagex Ltd.
   picker decides what to do with them; the plugin never unlocks a chunk or ticks
   a task itself. Achievements go only to a picker that says it accepts them.
 - **Item evidence:** what you wear and carry in your backpack (item id, count,
-  slot and name), for the picker to offer item tasks for review. Nothing ticks
-  from items without your say in the picker. Items go only to a picker that says
-  it accepts them.
+  slot and name). On a live world the picker ticks best-in-slot gear goals for
+  items you own; other item tasks wait for your review there. Beta worlds never
+  tick. Items go only to a picker that says it accepts them.
 
 ## Install (beta world)
 
