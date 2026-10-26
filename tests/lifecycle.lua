@@ -206,7 +206,7 @@ local old=panelWindow(); root=component(nil,{width=800,height=600}); emit('Windo
 emit('GameStateChanged',{newState=37}); assert(panelWindow().destroyed)
 emit('GameStateChanged',{newState=30}); assert(not panelWindow().destroyed)
 -- Edge resize: the panel rebuilds at a size that has held for a second, and keeps it.
-local pw=panelWindow(); assert(pw.options.resizable and pw.options.width==330 and pw.options.height==236)
+local pw=panelWindow(); assert(pw.options.resizable and pw.options.width==330 and pw.options.height==270)
 pw.root:SetSize(420,300)
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(panelWindow()==pw)
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); local bigger=panelWindow()
@@ -504,6 +504,56 @@ assert(#withItems(pump(400,itemPicker))>=1,'then tries again')
 values.sendItems=false; invs[93]=container(1205,'Adamant dagger'); emit('InventoryUpdated',{})
 assert(#withItems(pump(120,itemPicker))==0,'the setting turns items off')
 values.sendItems=true; assert(#withItems(pump(120,itemPicker))==1,'and back on')
+-- Sync now reads at once and reports from the next tick: here a backpack change the client sent no
+-- event for, then progress with diagnostics. A reading the picker holds isn't sent twice.
+assert(#withItems(pump(30,itemPicker))==0,'no items before the press')
+local function panelButton(label) for _,c in ipairs(panelWindow().children) do if c.content==label then return c end end end
+invs[93]=container(1215,'Dragon dagger')
+panelButton('Sync now').action(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
+assert(panelWindow().children[5].content=='Syncing…',panelWindow().children[5].content)
+local before=#requests; pump(20,itemPicker); got=bodies(before+1)
+assert(got[1].items and got[1].items.backpack[1][2]==1215 and #withItems(got)==1,'the new reading goes first')
+local plainAfter; for i=before+1,#requests do local b=requests[i].body and json.decode(requests[i].body); if b and not b.items and not b.achievements then plainAfter=b end end
+assert(plainAfter and plainAfter.diagnostics and plainAfter.skills,'then progress and diagnostics')
+emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(panelWindow().children[5].content:find('^Synced'),panelWindow().children[5].content)
+panelButton('Sync now').action(); assert(#withItems(pump(30,itemPicker))==0,'a held reading is not sent twice')
+-- A picker that accepts the pouch, belt and bank: they ride in items, and bank parts follow, each alone.
+invs[623]=container(995,'Coins')
+var={VarPlayer={{configName='TOOLBELT_NOOSE_WAND',id=-3008,value=1,isVarBit=true},{configName='TOOLBELT_RAND_KNIFE',id=-3014,value=1,isVarBit=true}}}
+local bankHeld
+local function fullPicker(b)
+  if b and b.bank and b.bank.part==b.bank.parts then bankHeld={snapshot=b.bank.snapshot} end
+  local r=json.decode(itemPicker(b).data); r.accepts=json.array({'achievements','items','pouch','toolbelt','bank'}); r.bank=bankHeld
+  return {responseCode=200,data=json.encode(r)}
+end
+local function withBank(list) local out={} for _,b in ipairs(list) do if b.bank then out[#out+1]=b end end return out end
+-- An older picker that lists only items: items still go, without the new fields, and no bank.
+invs[95]=container(1359,'Rune hatchet')
+emit('GameStateChanged',{newState=10}); emit('GameStateChanged',{newState=30})
+got=pump(120,itemPicker)
+local older=withItems(got)
+assert(#older>=1,'items still go to an older picker')
+for _,b in ipairs(older) do assert(b.items.pouch==nil and b.items.toolbelt==nil,'no new fields for an older picker') end
+for _,b in ipairs(got) do assert(b.bank==nil,'no bank for an older picker') end
+invs[95]=nil
+-- Login reads the belt varbits once; log in again so this run finds them.
+emit('GameStateChanged',{newState=10}); emit('GameStateChanged',{newState=30})
+got=pump(120,fullPicker)
+local withExtras=withItems(got)
+assert(#withExtras>=1,'items go again for the new fields')
+local last=withExtras[#withExtras].items
+assert(last.pouch[1][2]==995 and #last.toolbelt==1 and last.toolbelt[1][1]=='NOOSE_WAND','pouch and belt ride along')
+assert(#withBank(got)==0,'no bank before it is opened')
+invs[95]=container(995,'Coins'); emit('InventoryUpdated',{inv={id=95}})
+got=pump(30,fullPicker); local banks=withBank(got)
+assert(#banks==1 and banks[1].bank.rows[1][1]==995 and banks[1].bank.parts==1,'the bank goes once opened')
+local bb=banks[1]
+assert(bb.items==nil and bb.skills==nil and bb.diagnostics==nil and bb.achievements==nil,'a bank part travels alone')
+assert(#withBank(pump(700,fullPicker))==0,'an acknowledged bank is not sent again')
+-- A picker that forgets the bank (a restart) gets it again; Sync now sends at once.
+bankHeld=nil; local fresh=function(b) local r=fullPicker(b); if not (b and b.bank) then local d=json.decode(r.data); d.bank=nil; r.data=json.encode(d) end; return r end
+panelButton('Sync now').action(); assert(#withBank(pump(30,fresh))==1,'the forgotten bank goes again')
+var=nil; invs[95],invs[623]=nil,nil
 config.Inv,Inventory=nil,nil
 -- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
