@@ -143,7 +143,7 @@ local function diagnosticLines()
   end
   return lines
 end
--- The picker shows these under the key, so the probe goes there instead of the console.
+-- The picker shows these under the key, so they go there instead of the console.
 local function pickerLines()
   local lines=diagnosticLines()
   for _,line in ipairs(shading:debugLines()) do lines[#lines+1]=line end
