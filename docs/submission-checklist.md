@@ -48,11 +48,12 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
       Canada is case 2: list the endpoints and security measures and
       link a privacy notice. If traffic passes through a relay in the USA, it may be case 3,
       which also means sending Jagex private contact details through their form.
-- [ ] **Public contact email.** Required unless case 1. Jagex recommends an address
+- [ ] **Public contact email.** Decided 2026-10-27: a dedicated plugin mailbox
+      (to be created), forwarded from the picker's domain later. Required unless case 1. Jagex recommends an address
       separate from the mod.io and RuneScape logins. mod.io can't sign in with
       addresses that contain `+`.
-- [ ] **Feedback route and collaboration stance.** For example GitHub issues on
-      this repo, plus a sentence on whether contributions are welcome.
+- [x] **Feedback route and collaboration stance.** Decided 2026-10-27: GitHub issues
+      on this repo; open an issue before sending code.
 - [x] **Keep `chatAccess`?** Dropped 2026-10-27, along with the chatbox notices.
       The banners show the same messages. Bring it back only if players ask.
 - [x] **What goes in version 1.** Decided 2026-10-27: everything, including the
@@ -109,7 +110,8 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 - [ ] Create the listing early, hidden, to reserve the name.
 - [ ] Summary of 10 to 250 ASCII characters, a 16:9 logo of at least 512×288, and screenshots.
 - [ ] Homepage link to this repo.
-- [ ] Description sections, following the example page:
+- [ ] Description sections, following the example page. Drafted in
+      [listing.md](listing.md); fill in the email and server address:
   - [ ] Contact email.
   - [ ] Feedback and collaboration.
   - [ ] The EULA statement, copied word for word from the process page.
@@ -121,8 +123,9 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
   - [ ] Note that the partner chunk and roll come from the player's own picker, not
         from the game. "Obtaining any information about other players" gets
         extra review.
-- [ ] Privacy notice page (Jagex points to the ICO generator), for example
-      `PRIVACY.md` in this repo.
+- [ ] Privacy notice page (Jagex points to the ICO generator). Drafted as
+      [PRIVACY.md](../PRIVACY.md); fill in the server, hosting provider, log and
+      backup retention once the VPS exists.
 - [ ] Tags, including the tag for each permission.
 - [ ] Add PrettyUI (6398181) as a mod.io dependency; it must match
       `requiredDependencies`.
