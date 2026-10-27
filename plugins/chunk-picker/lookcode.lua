@@ -5,6 +5,7 @@ local M = {}
 M.PREFIX = "CP1"
 -- A whole code is 41 characters; anything much longer is not a look code.
 M.MAX_LENGTH = 80
+-- {store key, value -> letter, default}; the letters' order in a code follows this list.
 M.CHOICES = {
   {"shadeColours", {classic="c", colourblind="b", subtle="s", custom="x"}, "classic"},
   {"shadeWidth", {thin="t", normal="n", thick="k"}, "normal"},
@@ -15,7 +16,9 @@ M.CHOICES = {
   {"shadeFillStyle", {haze="h", ground="g"}, "haze"},
   {"shadePartner", {outline="o", tint="t", off="f"}, "outline"},
 }
-M.COLOURS = {"shadeRgbLocked", "shadeRgbRollable", "shadeRgbFillLocked", "shadeRgbFillRollable", "shadeRgbPartner"}
+M.COLOURS = {"shadeRgbLocked", "shadeRgbRollable", "shadeRgbFillLocked", "shadeRgbFillRollable",
+  "shadeRgbPartner"}
+-- get(key, kind, default) reads a stored setting, as store:get does.
 function M.encode(get)
   local letters = {}
   for i, choice in ipairs(M.CHOICES) do
