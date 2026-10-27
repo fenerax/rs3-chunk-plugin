@@ -98,14 +98,45 @@ function M.notedOf(item, lookup)
   return nil, "No noted version found for " .. tostring(item.name or item.id)
     .. (#seen > 0 and " (next to it: " .. table.concat(seen, ", ") .. ")" or "")
 end
+-- "5000", "20m", "1.5k", "2b", "20,000,000" -> integer, or nil. Blank is 1.
+local SCALE = {k = 1000, m = 1000000, b = 1000000000}
+function M.parseCount(text)
+  if type(text) ~= "string" or text:match("^%s*$") then return 1 end
+  local digits, suffix = text:lower():gsub("[,_%s]", ""):match("^(%d+%.?%d*)([kmb]?)$")
+  if not digits or #digits > 13 then return nil end
+  local value = tonumber(digits) * (SCALE[suffix] or 1)
+  -- 2.3m is 2299999.9999999995 in floating point: round, but refuse a real fraction (1.5).
+  local near = math.floor(value + 0.5)
+  local count = math.abs(value - near) < 1e-6 and math.tointeger(near) or nil
+  if not count or count < 1 or count > M.MAX_COUNT then return nil end
+  return count
+end
 function M.give(name, countText)
   if not configName(name) then return nil, "Bad item name" end
-  local count = 1
-  if type(countText) == "string" and not countText:match("^%s*$") then
-    count = integer(countText)
-    if not count or count < 1 or count > M.MAX_COUNT then return nil, "Count runs from 1 to 2147483647" end
-  end
+  local count = M.parseCount(countText)
+  if not count then return nil, "Count: 1 to 2147483647, or like 5000, 20k, 1.5m, 2b" end
   return "!give " .. name .. " " .. count
+end
+
+-- Item search over names[id] = display name (read from the game's own item list).
+-- Case-insensitive; exact names first, then names starting with the text, then any match,
+-- each by id. A noted copy (same name as the id before it) is left out. Returns ids.
+function M.search(names, query, maxResults)
+  if type(query) ~= "string" then return {} end
+  local q = query:lower():match("^%s*(.-)%s*$")
+  if #q < 2 then return {} end
+  local hits = {}
+  for objId, name in pairs(names) do
+    if type(name) == "string" and names[objId - 1] ~= name then
+      local low = name:lower()
+      local at = low:find(q, 1, true)
+      if at then hits[#hits + 1] = {objId, low == q and 0 or at == 1 and 1 or 2} end
+    end
+  end
+  table.sort(hits, function(a, b) if a[2] ~= b[2] then return a[2] < b[2] end; return a[1] < b[1] end)
+  local ids = {}
+  for i = 1, math.min(#hits, maxResults or 200) do ids[i] = hits[i][1] end
+  return ids
 end
 
 -- "Chunk 12850 · square 50,50 · local 9,56 · floor 0", plus the instance note when mapped back.

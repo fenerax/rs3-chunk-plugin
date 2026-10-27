@@ -12,6 +12,8 @@ file, a test file, anything named `dev`, or a cheat command.
   abusing them, for any reason, may be banned. Use them only to test this
   plugin, on beta, and never on a live world.
 - A command runs only when you press its button, at most one every 2 seconds.
+  Each send is numbered (Sent #3) and printed in the console; a second press
+  inside the 2 seconds is dropped and says so.
   Nothing here runs on a timer or in a loop.
 
 ## Chunk Picker dev tools plugin
@@ -25,8 +27,13 @@ file, a test file, anything named `dev`, or a cheat command.
   (`!tele floor,x,z,32,32`). Without a floor it keeps yours.
 - **N / E / S / W:** one chunk over, keeping your floor and spot in the
   chunk, for chunk-crossing tests.
+- **Find an item:** type part of its name (`rune arrow`) and press **Search**.
+  The first search each login reads the game's item list, a slice per frame,
+  then shows 5 results at a time (**More** for the next). Press a result's
+  number to put its id under Give. Searching never sends a command.
 - **Give:** an item configName (`logs`) or its numeric id (`1511`, looked up
-  through `config.Obj`), and a count (default 1): `!give logs 1`.
+  through `config.Obj`), and a count (default 1; `5000`, `20k`, `1.5m`, `2b`
+  also work, up to 2147483647): `!give logs 1`.
 - **Give noted:** the same, but gives the noted copy so a big count fits
   (`!give logs_noted 5000`, whatever its configName is). The API has no note
   link, so it takes the item next to it (id + 1, then id - 1) that has the

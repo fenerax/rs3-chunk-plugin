@@ -4,6 +4,7 @@
 -- a command only ever runs from a button press: nothing here runs on a timer or in a loop.
 local cmd = require("devcmd")
 local now, lastSent, alive = 0, -1000, true
+local sentCount, lastLine = 0, nil
 local window, fields, labels = nil, {}, {}
 local COOLDOWN = 2
 
@@ -28,14 +29,25 @@ end
 -- "Sent" only means the console took it; the game's reply (or error) shows in the console.
 local function run(command, err, note)
   if not command then say(err or "Couldn't build the command"); return end
-  if now - lastSent < COOLDOWN then say("Wait a moment between commands"); return end
+  -- A second press inside the gap (a double click, or one click seen twice) is dropped, but
+  -- the last send stays on screen, so a dropped press never looks like a lost command.
+  if now - lastSent < COOLDOWN then
+    say((lastLine or "Wait a moment") .. ". A second press was ignored: wait 2 s between commands")
+    return
+  end
   lastSent = now
   local ok, failure = pcall(function()
     if type(ExecuteConsoleCommand) == "nil" then error("ExecuteConsoleCommand is missing") end
     ExecuteConsoleCommand(command)
   end)
-  if ok then say("Sent: " .. command .. (note or ""))
-  else say("Couldn't run it (" .. tostring(failure):gsub("[%c]", " "):sub(1, 60) .. "); type: " .. command) end
+  if ok then
+    sentCount = sentCount + 1
+    lastLine = "Sent #" .. sentCount .. ": " .. command
+    say(lastLine .. (note or ""))
+  else
+    lastLine = nil
+    say("Couldn't run it (" .. tostring(failure):gsub("[%c]", " "):sub(1, 60) .. "); type: " .. command)
+  end
 end
 
 local function text(field)
@@ -110,6 +122,56 @@ local function give(noted)
   run(command, bad, note)
 end
 
+-- Item search. The game's item list is read once, a slice per frame so the client doesn't
+-- stall, into names[id]. Reading config is not a command; nothing is sent while searching.
+local SEARCH_ROWS, SLICE, LAST_ID, MAX_ID = 5, 800, 70000, 200000
+local index = {names = {}, nextId = 0, misses = 0, done = false}
+local search = {query = nil, ids = {}, page = 1}
+
+local function showResults()
+  if not labels.results then return end
+  local first = (search.page - 1) * SEARCH_ROWS
+  for i = 1, SEARCH_ROWS do
+    local objId = search.ids[first + i]
+    local line = objId and (i .. ". " .. index.names[objId] .. " (" .. objId .. ")") or ""
+    pcall(function() labels.results[i].content = line end)
+  end
+end
+local function runSearch()
+  search.ids, search.page = cmd.search(index.names, search.query), 1
+  showResults()
+  local n = #search.ids
+  say(n == 0 and ("No item names contain \"" .. search.query .. "\"")
+    or (n .. (n == 200 and "+" or "") .. " found; press a number to put its id under Give"))
+end
+local function readSlice()
+  if index.done then return end
+  local stop = index.nextId + SLICE - 1
+  for objId = index.nextId, stop do
+    local ok, name = pcall(function() local o = config.Obj.FromID(objId); return o and o.name end)
+    if ok and type(name) == "string" and name ~= "" and name ~= "null" then
+      index.names[objId], index.misses = name, 0
+    else index.misses = index.misses + 1 end
+    -- Past the known range, a long run of empty ids means the list has ended.
+    if objId >= MAX_ID or (objId >= LAST_ID and index.misses >= 5000) then index.done = true; break end
+  end
+  index.nextId = stop + 1
+  if index.done and search.query then runSearch()
+  elseif search.query then say("Reading the item list… " .. math.min(99, index.nextId * 100 // LAST_ID) .. "%") end
+end
+local function find()
+  local q = text(fields.search)
+  if type(q) ~= "string" or #q:match("^%s*(.-)%s*$") < 2 then say("Type at least 2 letters of the item's name"); return end
+  search.query = q:match("^%s*(.-)%s*$")
+  if index.done then runSearch() else say("Reading the item list… (once per login)") end
+end
+local function pick(i)
+  local objId = search.ids[(search.page - 1) * SEARCH_ROWS + i]
+  if not objId then return end
+  pcall(function() fields.item:SetText(tostring(objId), false) end)
+  say("Give: " .. index.names[objId] .. " (" .. objId .. "). Set a count, then Give or Give noted")
+end
+
 local function destroy()
   if window then pcall(function() window:Destroy() end) end
   window, fields, labels = nil, {}, {}
@@ -120,8 +182,8 @@ local function build()
   local ok, err = pcall(function()
     local parent = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
     if not parent then return end
-    local w = prettyui.Window.new(parent, {title = "Chunk Picker dev (beta only)", x = 20, y = 120, width = 360, height = 420,
-      resizable = true, minWidth = 300, minHeight = 360, scrollable = false, onClose = function() alive = false end})
+    local w = prettyui.Window.new(parent, {title = "Chunk Picker dev (beta only)", x = 20, y = 120, width = 380, height = 620,
+      resizable = true, minWidth = 320, minHeight = 480, scrollable = false, onClose = function() alive = false end})
     window = w
     labels.position = w:AddText({text = "Position: waiting", height = 36, maxLines = 2})
     w:AddText("Teleport: chunk id, x,z or floor,x,z")
@@ -130,9 +192,21 @@ local function build()
     for _, dir in ipairs({"N", "E", "S", "W"}) do
       w:AddSimpleButton(dir, function() step(dir) end, {inline = true, tooltip = "One chunk " .. dir})
     end
+    w:AddText("Find an item by name")
+    fields.search = w:AddTextField({text = "", placeholder = "rune arrow", maxLength = 40})
+    w:AddSimpleButton("Search", find, {tooltip = "Search the game's item names"})
+    for i = 1, SEARCH_ROWS do
+      w:AddSimpleButton(tostring(i), function() pick(i) end, {inline = true, tooltip = "Use result " .. i})
+    end
+    w:AddSimpleButton("More", function()
+      if search.page * SEARCH_ROWS < #search.ids then search.page = search.page + 1 else search.page = 1 end
+      showResults()
+    end, {inline = true, tooltip = "Next results (wraps round)"})
+    labels.results = {}
+    for i = 1, SEARCH_ROWS do labels.results[i] = w:AddText({text = "", height = 18, maxLines = 1}) end
     w:AddText("Give: item name or id, then a count")
     fields.item = w:AddTextField({text = "", placeholder = "logs or 1511", maxLength = 80})
-    fields.count = w:AddTextField({text = "", placeholder = "Count (1)", maxLength = 10})
+    fields.count = w:AddTextField({text = "", placeholder = "Count: 1, 5000, 20k, 1.5m, 2b", maxLength = 14})
     w:AddSimpleButton("Give", function() give(false) end, {tooltip = "!give into the backpack"})
     w:AddSimpleButton("Give noted", function() give(true) end, {inline = true, tooltip = "!give the noted version, so a big count fits"})
     w:AddSimpleButton("Open bank", function() run("!bank") end, {inline = true})
@@ -145,6 +219,7 @@ end
 Event.Draw.Subscribe("chunkPickerDevDraw", function(e)
   local delta = tonumber(e.timeDeltaSecs)
   if delta and delta >= 0 and delta < 60 then now = now + delta end
+  if search.query and not index.done then readSlice() end
 end)
 -- Reads the position only; never sends a command.
 Event.ServerLogic.Subscribe("chunkPickerDevTick", function()

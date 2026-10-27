@@ -41,6 +41,11 @@ eq(cmd.give("logs", ""), "!give logs 1", "count defaults to 1")
 eq(cmd.give("bronze_dagger", " 5 "), "!give bronze_dagger 5")
 eq(cmd.give("coins", "2147483647"), "!give coins 2147483647")
 eq(cmd.give("coins", "2147483648"), nil, "count too big"); eq(cmd.give("coins", "0"), nil, "zero")
+eq(cmd.give("coins", "20m"), "!give coins 20000000"); eq(cmd.give("coins", "1.5K"), "!give coins 1500")
+eq(cmd.give("coins", "2.3m"), "!give coins 2300000", "rounding"); eq(cmd.give("coins", "2b"), "!give coins 2000000000")
+eq(cmd.give("coins", "20,000,000"), "!give coins 20000000"); eq(cmd.give("coins", " 7 k "), "!give coins 7000")
+eq(cmd.give("coins", "3b"), nil, "over the max"); eq(cmd.give("coins", "1.5"), nil, "a fraction"); eq(cmd.give("coins", "5x"), nil)
+eq(cmd.give("coins", "0.0001k"), nil, "rounds to a fraction"); eq(cmd.give("coins", "k"), nil)
 eq(cmd.give("coins", "1e3"), nil, "not digits"); eq(cmd.give("logs bank", "1"), nil, "a name can't carry an inventory")
 
 -- Item names: typed configNames pass, ids go through the lookup, nothing else gets through.
@@ -73,6 +78,12 @@ local nn, nwhy = cmd.notedOf(objs[995], look); eq(nn, nil); assert(nwhy:find("al
 nn, nwhy = cmd.notedOf(objs[40], look); eq(nn, nil); assert(nwhy:find("Thing"), "a neighbour with another name is no note")
 assert(nwhy:find("41=Other/1", 1, true), "says what sat next to it")
 eq(cmd.notedOf(nil, look), nil, "unreadable item")
+-- Item search: exact, then starts-with, then contains; noted copies left out.
+local names = {[892] = "Rune arrow", [893] = "Rune arrow (p)", [1511] = "Logs", [1512] = "Logs", [4] = "Broad rune arrow", [11] = "Rune arrowheads"}
+local found = cmd.search(names, " RUNE ARROW ")
+eq(#found, 4); eq(found[1], 892, "exact first"); eq(found[2], 11, "then starts-with by id"); eq(found[3], 893); eq(found[4], 4, "then contains")
+eq(#cmd.search(names, "logs"), 1, "the noted copy is left out"); eq(#cmd.search(names, "r"), 0, "needs 2 letters")
+eq(#cmd.search(names, "rune", 2), 2, "capped"); eq(#cmd.search(names, nil), 0)
 eq(cmd.positionLine(nil), "Position: waiting"); eq(cmd.positionLine({}), "Position: unreadable")
 
 -- The plugin itself, against a mock client: commands come only from buttons, never from ticks.
@@ -92,7 +103,7 @@ end
 prettyui = {Window = {new = function()
   return {
     AddText = function(_, o) local t = {content = type(o) == "table" and o.text or o}; texts[#texts + 1] = t; return t end,
-    AddTextField = function(_, o) local f = {value = "", GetText = function(self) return self.value end}; inputs[o.placeholder] = f; return f end,
+    AddTextField = function(_, o) local f = {value = "", GetText = function(self) return self.value end, SetText = function(self, v) self.value = v end}; inputs[o.placeholder] = f; return f end,
     AddSimpleButton = function(_, label, fn) buttons[label] = fn end,
     Destroy = function() end}
 end}}
@@ -105,20 +116,21 @@ eq(texts[1].content, "Chunk 12850 · square 50,50 · local 9,56 · floor 0", "po
 local result = texts[#texts]
 inputs["12850 or 50,50"].value = "53,45"; buttons.Teleport()
 eq(sent[1], "!tele 0,53,45,32,32", "teleport to the middle of the chunk")
-buttons.N(); eq(#sent, 1, "a second press inside 2 seconds waits"); assert(result.content:find("Wait"), "says to wait")
+buttons.N(); eq(#sent, 1, "a second press inside 2 seconds waits")
+assert(result.content:find("Sent #1: !tele 0,53,45,32,32", 1, true) and result.content:find("ignored"), "keeps the last send and says the press was dropped")
 tick(); buttons.N(); eq(sent[2], "!tele 0,50,51,9,56", "north keeps floor and spot")
-tick(); inputs["logs or 1511"].value = "1511"; inputs["Count (1)"].value = "28"; buttons.Give()
+tick(); inputs["logs or 1511"].value = "1511"; inputs["Count: 1, 5000, 20k, 1.5m, 2b"].value = "28"; buttons.Give()
 eq(sent[3], "!give logs 28", "give by id")
 tick(); inputs["logs or 1511"].value = "logs; !bank"; buttons.Give(); eq(#sent, 3, "a bad name sends nothing")
-tick(); inputs["logs or 1511"].value = "logs"; inputs["Count (1)"].value = "5000"; buttons["Give noted"]()
+tick(); inputs["logs or 1511"].value = "logs"; inputs["Count: 1, 5000, 20k, 1.5m, 2b"].value = "5000"; buttons["Give noted"]()
 eq(sent[4], "!give logs_noted 5000", "give noted by name"); eq(#sent, 4)
 tick(); inputs["logs or 1511"].value = "coins"; buttons["Give noted"](); eq(#sent, 4, "coins have no note")
 assert(result.content:find("already stacks"), "says why")
-tick(); inputs["logs or 1511"].value = "rune_arrows"; inputs["Count (1)"].value = "50"; buttons.Give()
+tick(); inputs["logs or 1511"].value = "rune_arrows"; inputs["Count: 1, 5000, 20k, 1.5m, 2b"].value = "50"; buttons.Give()
 eq(sent[5], "!give rune_arrows 50", "an unknown name still goes"); assert(result.content:find("type its id", 1, true), "but warns")
-tick(); inputs["logs or 1511"].value = "LOGS"; inputs["Count (1)"].value = "2"; buttons.Give()
+tick(); inputs["logs or 1511"].value = "LOGS"; inputs["Count: 1, 5000, 20k, 1.5m, 2b"].value = "2"; buttons.Give()
 eq(sent[6], "!give logs 2", "a known name goes as its exact configName"); assert(not result.content:find("check"), "no warning")
-tick(); inputs["logs or 1511"].value = "1511"; inputs["Count (1)"].value = "3"; buttons["Give noted"]()
+tick(); inputs["logs or 1511"].value = "1511"; inputs["Count: 1, 5000, 20k, 1.5m, 2b"].value = "3"; buttons["Give noted"]()
 eq(sent[7], "!give logs_noted 3", "give noted by id"); eq(#sent, 7)
 tick(); inputs["logs or 1511"].value = "nothing_here"; buttons["Give noted"](); eq(#sent, 7, "unknown name sends nothing")
 assert(result.content:find("Couldn't look up nothing_here", 1, true), "names what failed")
@@ -126,6 +138,16 @@ tick(); buttons["Open bank"](); buttons["Where am I"](); eq(sent[8], "!bank"); e
 tick(); buttons["Where am I"](); eq(sent[9], "!getcoord")
 ExecuteConsoleCommand = function() error("not allowed here") end
 tick(); buttons["Open bank"](); assert(result.content:find("type: !bank", 1, true), "a failed command is shown to type")
+-- Search reads the item list over frames, then a number fills Give with that id.
+local before = #sent
+inputs["rune arrow"].value = "x"; buttons.Search(); assert(result.content:find("2 letters"), "too short")
+inputs["rune arrow"].value = "logs"; buttons.Search(); assert(result.content:find("Reading"), "reads first")
+for _ = 1, 200 do events.Draw({timeDeltaSecs = 0.016}) end
+assert(result.content:find("1 found", 1, true), "found once read: " .. result.content)
+local rows = {}; for i = 1, #texts do rows[#rows + 1] = texts[i].content end
+assert(table.concat(rows, "|"):find("1. Logs (1511)", 1, true), "result row shown")
+buttons["1"](); eq(inputs["logs or 1511"].value, "1511", "picking fills the id"); eq(#sent, before, "searching sends nothing")
+inputs["rune arrow"].value = "zzz"; buttons.Search(); assert(result.content:find("No item names"), "none found")
 PluginShutdown(); eq(events.ServerLogic, nil, "shutdown unsubscribes")
 print = nil
 io.write("devtools tests passed\n")
