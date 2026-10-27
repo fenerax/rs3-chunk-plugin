@@ -62,23 +62,39 @@ end
 local function findName(objId)
   return config.Obj.FromID(objId).configName
 end
--- An ObjType's fields as a plain table, by id or configName (config.Obj.<name>), or nil.
+-- An ObjType by id, or by configName as typed, upper-case or lower-case (config.Inv uses
+-- upper-case names, so config.Obj may too). Returns its fields as a plain table, or nil and why.
 local function objInfo(key)
+  local o, last
+  local keys = type(key) == "number" and {key} or {key, key:upper(), key:lower()}
+  for _, k in ipairs(keys) do
+    local ok, found = pcall(function()
+      if type(k) == "number" then return config.Obj.FromID(k) end
+      return config.Obj[k]
+    end)
+    if ok and found then o = found; break end
+    last = ok and "not found" or tostring(found):gsub("[%c]", " "):sub(1, 40)
+  end
+  if not o then return nil, last or "not found" end
   local ok, info = pcall(function()
-    local o = type(key) == "number" and config.Obj.FromID(key) or config.Obj[key]
-    if not o then return nil end
     -- stackType may come back as a number or an enum value; ALWAYS is 1 either way.
     local stack = o.stackType
     stack = math.tointeger(tonumber(stack)) or (tostring(stack):find("ALWAYS") and cmd.STACK_ALWAYS) or stack
-    return {id = o.id, name = o.name, configName = o.configName, stackType = stack}
+    return {id = math.tointeger(tonumber(o.id)), name = o.name, configName = o.configName, stackType = stack}
   end)
-  return ok and info or nil
+  if not ok then return nil, "fields unreadable: " .. tostring(info):gsub("[%c]", " "):sub(1, 40) end
+  if not info.id then return nil, "no id on it" end
+  return info
 end
 local function give(noted)
-  local name, err = cmd.itemName(text(fields.item), findName)
+  local typed = text(fields.item)
+  local name, err = cmd.itemName(typed, findName)
   if not name then say(err); return end
   if noted then
-    name, err = cmd.notedOf(objInfo(name), objInfo)
+    local typedId = math.tointeger(tonumber(typed))
+    local info, why = objInfo(typedId or name)
+    if not info then say("Couldn't look up " .. name .. " (" .. why .. "); try its id, e.g. 1511"); return end
+    name, err = cmd.notedOf(info, objInfo)
     if not name then say(err); return end
   end
   local command, bad = cmd.give(name, text(fields.count))
