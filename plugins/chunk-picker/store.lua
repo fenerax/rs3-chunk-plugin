@@ -1,8 +1,23 @@
--- Typed, immediate writes: no proxy objects and no key values in diagnostics.
+-- Saved settings and state in the client's PersistentDB. Typed, immediate writes: no proxy
+-- objects and no key values in diagnostics. Every call is guarded, so a storage error reads as
+-- the default (get) or as unreadable (read), never as a crash.
 local M = {}
-M.keys = {"server", "personalKey", "keyOwner", "sendSkills", "sendQuests", "sendAchievements", "sendItems", "showPanel", "showPartner", "warnLocked", "warnRoll", "shadeChunks", "shadeColours", "shadeWidth", "shadeWalls", "shadeGrid", "shadeFillLocked", "shadeFillRollable", "shadeFillStrength", "shadeFillStyle", "shadePartner", "shadeRgbPartner", "shadeRgbLocked", "shadeRgbRollable", "shadeRgbFillLocked", "shadeRgbFillRollable", "beta", "collapsed", "panelX", "panelY", "panelW", "panelH", "settingsWindow", "settingsX", "settingsY", "settingsW", "settingsH", "tasksWindow", "tasksView", "tasksX", "tasksY", "tasksW", "tasksH", "sequence", "itemJournal"}
+-- Every key the plugin stores, listed in diagnostics as set or not set (never the value).
+M.keys = {
+  "server", "personalKey", "keyOwner",
+  "sendSkills", "sendQuests", "sendAchievements", "sendItems",
+  "showPanel", "showPartner", "warnLocked", "warnRoll",
+  "shadeChunks", "shadeColours", "shadeWidth", "shadeWalls", "shadeGrid",
+  "shadeFillLocked", "shadeFillRollable", "shadeFillStrength", "shadeFillStyle", "shadePartner",
+  "shadeRgbPartner", "shadeRgbLocked", "shadeRgbRollable", "shadeRgbFillLocked", "shadeRgbFillRollable",
+  "beta", "collapsed", "panelX", "panelY", "panelW", "panelH",
+  "settingsWindow", "settingsX", "settingsY", "settingsW", "settingsH",
+  "tasksWindow", "tasksView", "tasksX", "tasksY", "tasksW", "tasksH",
+  "sequence", "itemJournal",
+}
 function M.new(db)
   local self = {db = db, writeOK = true}
+  -- kind is the PersistentDB type suffix: "Bool", "Int" or "String".
   function self:get(key, kind, default)
     local ok, value = pcall(function()
       if not self.db:CheckExists(key) then return nil end

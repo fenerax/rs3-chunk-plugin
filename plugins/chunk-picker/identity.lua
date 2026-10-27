@@ -26,27 +26,47 @@ function M.new(store)
   -- Returns nil when reports may go out, or the reason they are paused.
   -- `key` is the key the caller is about to send, so a second read can't disagree with it.
   function self:check(key)
-    if key == nil or key == "" then self.state = "no key"; return M.STORAGE end
+    if key == nil or key == "" then
+      self.state = "no key"
+      return M.STORAGE
+    end
     local name = M.current()
-    if not name then self.state = "waiting"; return M.WAITING end
+    if not name then
+      self.state = "waiting"
+      return M.WAITING
+    end
     local readable, owner = store:read("keyOwner", "String")
-    if not readable then self.state = "owner unreadable"; return M.STORAGE end
-    if owner == M.PENDING then self.state = "save unfinished"; return M.UNFINISHED end
+    if not readable then
+      self.state = "owner unreadable"
+      return M.STORAGE
+    end
+    if owner == M.PENDING then
+      self.state = "save unfinished"
+      return M.UNFINISHED
+    end
     if owner == nil or owner == "" then
       -- A key saved before keys were bound belongs to the first character that uses it,
       -- but only once that binding is stored.
       store:set("keyOwner", "String", name)
       local saved, stored = store:read("keyOwner", "String")
-      if not saved or stored ~= name then self.state = "binding not saved"; return M.STORAGE end
-      self.state = "bound now"; return nil
+      if not saved or stored ~= name then
+        self.state = "binding not saved"
+        return M.STORAGE
+      end
+      self.state = "bound now"
+      return nil
     end
-    if owner ~= name then self.state = "other character"; return M.MISMATCH end
+    if owner ~= name then
+      self.state = "other character"
+      return M.MISMATCH
+    end
     if self.state ~= "bound now" then self.state = "this character" end
     return nil
   end
   function self:describe() return self.state end
   return self
 end
+-- Writes a string and reads it back; true only when the stored value matches.
 local function wrote(store, name, value)
   store:set(name, "String", value)
   local ok, stored = store:read(name, "String")
@@ -57,7 +77,9 @@ end
 function M.save(store, key)
   if not wrote(store, "keyOwner", M.PENDING) then return "Couldn't save the key; try again" end
   if not wrote(store, "personalKey", key) then return "Couldn't save the key; try again" end
-  if not wrote(store, "keyOwner", M.current() or "") then return "Key saved but not tied to this character; Save again" end
+  if not wrote(store, "keyOwner", M.current() or "") then
+    return "Key saved but not tied to this character; Save again"
+  end
 end
 -- Each manifest server keeps its own key and owner. The selected server's pair stays in
 -- personalKey and keyOwner, so a key saved before servers had their own belongs to the one
@@ -75,21 +97,35 @@ function M.switch(store, from, to)
   if not readKey or not readOwner then return failed end
   local fromKey, fromOwner = M.parked(from)
   if key and key ~= "" then
-    if not (wrote(store, fromOwner, M.PENDING) and wrote(store, fromKey, key) and wrote(store, fromOwner, owner or "")) then return failed end
-  elseif not store:forget(fromKey, fromOwner) then return failed end
+    -- Park the current pair under `from`, PENDING first so a half-written copy pauses sending.
+    if not (wrote(store, fromOwner, M.PENDING) and wrote(store, fromKey, key)
+        and wrote(store, fromOwner, owner or "")) then
+      return failed
+    end
+  elseif not store:forget(fromKey, fromOwner) then
+    return failed
+  end
   local toKey, toOwner = M.parked(to)
   local readSaved, saved = store:read(toKey, "String")
   local readSavedOwner, savedOwner = store:read(toOwner, "String")
   if not readSaved or not readSavedOwner then return failed end
   -- An empty owner reads as unbound, the same as none.
   local function undo() store:set("keyOwner", "String", owner or "") end
-  if not wrote(store, "keyOwner", M.PENDING) then undo(); return failed end
-  if not wrote(store, "server", to) then undo(); return failed end
+  if not wrote(store, "keyOwner", M.PENDING) then
+    undo()
+    return failed
+  end
+  if not wrote(store, "server", to) then
+    undo()
+    return failed
+  end
   -- A parked key always has an owner; if that went missing, Save settles it.
   local loaded
   if saved and saved ~= "" then
     loaded = wrote(store, "personalKey", saved) and wrote(store, "keyOwner", savedOwner or M.PENDING)
-  else loaded = store:forget() end
+  else
+    loaded = store:forget()
+  end
   if not loaded then return "Server changed but its key didn't load; save the key again" end
   -- The pair now lives only in personalKey and keyOwner, so Forget leaves no copy behind.
   store:forget(toKey, toOwner)
