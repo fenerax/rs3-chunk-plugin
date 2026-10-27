@@ -6,22 +6,24 @@ local json = require("json")
 local M = {COMPLETE = -2, PERIOD = 600, PROMPT_DELAY = 3, PART_BYTES = 12000, MAX_PARTS = 8}
 -- The picker reads numbers as JavaScript does, so ids and categories stay safe integers.
 local MAX_SAFE = 9007199254740991
+-- object[key], or nil when the client throws for it.
 local function get(object, key)
   local ok, value = pcall(function() return object[key] end)
   if ok then return value end
 end
+-- What identifies a var across lookups: its id, else its name, else the object itself.
 local function varKey(variable) return get(variable, "id") or get(variable, "configName") or variable end
 -- Two small polynomial hashes over the id list: the same set always gets the same snapshot
 -- name. The products are floats (exact below 2^53), so 32-bit test integers and the game's
 -- 64-bit Lua give the same answer; integer products would overflow in 32 bits.
 local function checksum(text)
-  local a, b = 5381.0, 7.0
+  local first, second = 5381.0, 7.0
   for i = 1, #text do
     local byte = text:byte(i)
-    a = (a * 33.0 + byte) % 2147483647
-    b = (b * 31.0 + byte) % 2147483629
+    first = (first * 33.0 + byte) % 2147483647
+    second = (second * 31.0 + byte) % 2147483629
   end
-  return string.format("%08x%08x", math.tointeger(a), math.tointeger(b))
+  return string.format("%08x%08x", math.tointeger(first), math.tointeger(second))
 end
 M.checksum = checksum
 -- Names the picker accepts: 1-120 bytes (or `limit`), no C0 or C1 controls, cut on a UTF-8 boundary.
@@ -29,13 +31,17 @@ local function clean(name, limit)
   limit = limit or 120
   name = name:gsub("%c", " "):gsub("\xC2[\x80-\x9F]", " "):match("^%s*(.-)%s*$")
   if #name > limit then
+    -- Step back over continuation bytes (0x80-0xBF) so a character is never cut in half.
     local cut = limit
-    while cut > 0 and (name:byte(cut + 1) or 0) >= 0x80 and name:byte(cut + 1) < 0xC0 do cut = cut - 1 end
+    while cut > 0 and (name:byte(cut + 1) or 0) >= 0x80 and name:byte(cut + 1) < 0xC0 do
+      cut = cut - 1
+    end
     name = name:sub(1, cut):match("^(.-)%s*$")
   end
   if name ~= "" then return name end
 end
 M.clean = clean
+-- A category id, or -1 when there is none or it isn't a safe integer.
 local function category(value)
   local n = type(value) == "number" and math.tointeger(value)
   return n and n >= -1 and n <= MAX_SAFE and n or -1
@@ -55,7 +61,8 @@ function M.read()
         name = type(name) == "string" and clean(name)
         if id and id >= 0 and id <= MAX_SAFE and name and not seen[id] then
           seen[id] = true
-          rows[#rows + 1] = json.array({id, name, category(get(achievement, "category")), category(get(achievement, "subCategory"))})
+          rows[#rows + 1] = json.array({id, name, category(get(achievement, "category")),
+            category(get(achievement, "subCategory"))})
         end
       end
     end
@@ -65,12 +72,17 @@ function M.read()
   return rows
 end
 -- Split rows into parts whose encoded lists stay under PART_BYTES each.
+-- `size` starts at 2 for the list's brackets; each row adds its length plus a comma.
 function M.split(rows)
   local parts, current, size = {}, json.array(), 2
   for _, row in ipairs(rows) do
     local bytes = #json.encode(row) + 1
-    if #current > 0 and size + bytes > M.PART_BYTES then parts[#parts + 1] = current; current, size = json.array(), 2 end
-    current[#current + 1] = row; size = size + bytes
+    if #current > 0 and size + bytes > M.PART_BYTES then
+      parts[#parts + 1] = current
+      current, size = json.array(), 2
+    end
+    current[#current + 1] = row
+    size = size + bytes
   end
   parts[#parts + 1] = current
   return parts
@@ -86,12 +98,18 @@ function M.new()
   -- an earlier refusal, which belonged to the previous picker or key.
   function self:resend()
     self.refusedUntil = nil
-    if self.parts then self.sent = 0; self.state = "read" end
+    if self.parts then
+      self.sent = 0
+      self.state = "read"
+    end
   end
   function self:readNow(now)
     self.readAt, self.promptAt = now, nil
     local rows = M.read()
-    if not rows then self.state = "unavailable"; return end
+    if not rows then
+      self.state = "unavailable"
+      return
+    end
     -- The name covers everything sent, so a corrected name or category is a new set too.
     local encoded = {}
     for i, row in ipairs(rows) do encoded[i] = json.encode(row) end
@@ -116,6 +134,7 @@ function M.new()
     end
     self:readNow(now)
   end
+  -- A recent-completion var changed: re-read shortly, once the client has updated the table.
   function self:var(event, now)
     local variable = get(event, "var")
     if self.recent and variable ~= nil and self.recent[varKey(variable)] then
@@ -123,7 +142,9 @@ function M.new()
     end
   end
   function self:tick(now)
-    if (self.promptAt and now >= self.promptAt) or (self.readAt and now - self.readAt >= M.PERIOD) then self:readNow(now) end
+    if (self.promptAt and now >= self.promptAt) or (self.readAt and now - self.readAt >= M.PERIOD) then
+      self:readNow(now)
+    end
   end
   -- The next part to send, or nil when the picker has the whole current set.
   function self:pending(now)
@@ -149,10 +170,13 @@ function M.new()
     self.state = received == #self.parts and "sent" or "sending"
   end
   -- A picker that advertised the field but refused it gets left alone for half an hour.
-  function self:refused(now) self.refusedUntil, self.sent, self.state = now + 1800, 0, "refused by picker" end
+  function self:refused(now)
+    self.refusedUntil, self.sent, self.state = now + 1800, 0, "refused by picker"
+  end
   function self:describe()
     local count = self.rows and #self.rows or 0
-    return self.state .. "; complete=" .. count .. "; parts=" .. self.sent .. "/" .. (self.parts and #self.parts or 0)
+    return self.state .. "; complete=" .. count
+      .. "; parts=" .. self.sent .. "/" .. (self.parts and #self.parts or 0)
       .. "; recent vars=" .. (self.recent and (next(self.recent) and "yes" or "no") or "-")
   end
   self:reset()

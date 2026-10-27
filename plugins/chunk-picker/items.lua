@@ -11,12 +11,18 @@ local json = require("json")
 local achievements = require("achievements")
 local identity = require("identity")
 local M = {MAX_SLOTS = 64, MAX_ID = 1000000, MAX_COUNT = 2147483647, JOURNAL = 32, PERIOD = 60, DELAY = 2,
-  RESEND = 60, REFUSED = 1800, MAX_BYTES = 14000, KEY = "itemJournal", BELT_ROWS = 128, BELT_MAX = 1000, BELT_RETRY = 600,
-  BACKPACK = {"INV", "BACKPACK", "INVENTORY", 93}, WORN = {"WORN", "EQUIPMENT", "WORNITEMS", 94}, POUCH = {"MONEY_POUCH", 623}}
+  RESEND = 60, REFUSED = 1800, MAX_BYTES = 14000, KEY = "itemJournal",
+  BELT_ROWS = 128, BELT_MAX = 1000, BELT_RETRY = 600,
+  -- Names and ids to try for each container, in order.
+  BACKPACK = {"INV", "BACKPACK", "INVENTORY", 93},
+  WORN = {"WORN", "EQUIPMENT", "WORNITEMS", 94},
+  POUCH = {"MONEY_POUCH", 623}}
+-- object[key], or nil when the client throws for it.
 local function get(object, key)
   local ok, value = pcall(function() return object[key] end)
   if ok then return value end
 end
+-- The first container in `names` that the client finds, and the name or id that found it.
 local function find(names)
   for _, name in ipairs(names) do
     local ok, inv = pcall(function()
@@ -41,7 +47,8 @@ function M.container(names)
       local slot = inv:GetSlot(i)
       local obj, count = slot and slot.obj, slot and slot.count
       -- Capped first: stacks can pass 2^31, and 32-bit test Lua has no wider integers.
-      count = type(count) == "number" and count >= 1 and count == math.floor(count) and math.tointeger(math.min(count, M.MAX_COUNT))
+      count = type(count) == "number" and count >= 1 and count == math.floor(count)
+        and math.tointeger(math.min(count, M.MAX_COUNT))
       if obj ~= nil and count then
         local id, name = obj, nil
         if type(obj) ~= "number" then id, name = obj.id, obj.name end
@@ -64,8 +71,12 @@ local function beltName(name)
   if type(name) ~= "string" or name:sub(1, 9) ~= "TOOLBELT_" then return nil end
   local short = name:sub(10)
   if not short:match("^[A-Z0-9_]+$") or #short > 40 then return nil end
-  for _, prefix in ipairs({"RAND_", "LAST_", "CURRENT_", "GOLD_ACC"}) do if short:sub(1, #prefix) == prefix then return nil end end
-  for _, suffix in ipairs({"_OLD", "_BOUGHT", "_ENABLED"}) do if short:sub(-#suffix) == suffix then return nil end end
+  for _, prefix in ipairs({"RAND_", "LAST_", "CURRENT_", "GOLD_ACC"}) do
+    if short:sub(1, #prefix) == prefix then return nil end
+  end
+  for _, suffix in ipairs({"_OLD", "_BOUGHT", "_ENABLED"}) do
+    if short:sub(-#suffix) == suffix then return nil end
+  end
   return short
 end
 M.beltName = beltName
@@ -110,7 +121,11 @@ local function hex16(text) return achievements.checksum(text) end
 function M.coins(rows)
   local total = 0
   for _, row in ipairs(rows or {}) do
-    if row[2] == 995 then total = total + row[3] elseif row[2] == 54830 then total = total + row[3] * 1e9 end
+    if row[2] == 995 then
+      total = total + row[3]
+    elseif row[2] == 54830 then
+      total = total + row[3] * 1e9
+    end
   end
   return string.format("%.0f", total)
 end
@@ -120,6 +135,8 @@ local function owner(store)
   local ok, keyOwner = store:read("keyOwner", "String")
   if name and ok and keyOwner == name then return name end
 end
+-- A stored journal, or nil unless every part checks out: right owner, a 16-hex-digit id, and
+-- events [n, id, label] numbered upwards and below `next`.
 local function parse(text, name)
   local value = json.decode(text)
   if type(value) ~= "table" or value.owner ~= name or type(value.id) ~= "string"
@@ -130,8 +147,11 @@ local function parse(text, name)
   for _, event in ipairs(value.events) do
     local n, id = math.tointeger(event[1]), math.tointeger(event[2])
     local label = type(event[3]) == "string" and achievements.clean(event[3], 80)
-    if not n or n <= last or n >= nextEvent or not id or id < 0 or id > M.MAX_ID or not label then return nil end
-    events[#events + 1] = {n, id, label}; last = n
+    if not n or n <= last or n >= nextEvent or not id or id < 0 or id > M.MAX_ID or not label then
+      return nil
+    end
+    events[#events + 1] = {n, id, label}
+    last = n
   end
   if #events > M.JOURNAL then return nil end
   return {id = value.id:lower(), owner = name, next = nextEvent, events = events}
@@ -153,37 +173,60 @@ function M.new(store)
   -- A new connection forgets the picker's acknowledgement and any refusal; both belonged to it.
   function self:resend() self.acked, self.refusedUntil, self.sentKey = nil, nil, nil end
   function self:save()
-    local j = self.journal
-    if not j or not j.owner then return end
+    local journal = self.journal
+    if not journal or not journal.owner then return end
     local events = json.array()
-    for i, event in ipairs(j.events) do events[i] = json.array({event[1], event[2], event[3]}) end
-    self.saved = store:set(M.KEY, "String", json.encode({id = j.id, owner = j.owner, next = j.next, events = events}))
+    for i, event in ipairs(journal.events) do events[i] = json.array({event[1], event[2], event[3]}) end
+    self.saved = store:set(M.KEY, "String",
+      json.encode({id = journal.id, owner = journal.owner, next = journal.next, events = events}))
   end
   -- Loads this character's journal, or starts a new one with a fresh id. A journal that can't
   -- be read stays in memory only, so it never overwrites one that might still be there.
   function self:open(now)
     local name = owner(store)
     if self.journal and self.journal.owner == name then return end
-    local fresh = {id = hex16(tostring(now) .. "|" .. tostring(math.random and math.random() or 0) .. "|" .. tostring(self.journal and self.journal.id)),
+    local fresh = {id = hex16(tostring(now) .. "|" .. tostring(math.random and math.random() or 0)
+        .. "|" .. tostring(self.journal and self.journal.id)),
       owner = name, next = 1, events = {}}
-    if not name then self.journal = fresh; self.journal.owner = nil; return end
+    if not name then
+      self.journal = fresh
+      self.journal.owner = nil
+      return
+    end
     local readable, text = store:read(M.KEY, "String")
-    if not readable then self.journal = fresh; self.journal.owner = nil; self.saved = false; return end
+    if not readable then
+      self.journal = fresh
+      self.journal.owner = nil
+      self.saved = false
+      return
+    end
     local loaded = type(text) == "string" and decode(text, name)
-    if loaded then self.journal = loaded; return end
-    self.journal = fresh; self:save()
+    if loaded then
+      self.journal = loaded
+      return
+    end
+    self.journal = fresh
+    self:save()
   end
+  -- Journals items newly worn since the last read that aren't already listed.
   function self:note(rows)
-    local j, worn, changed = self.journal, {}, false
+    local journal, worn, changed = self.journal, {}, false
     -- Slot order, so the same outfit always gets the same event numbers.
     for _, row in ipairs(rows) do
       local id, name = row[2], row[4]
       if not worn[id] and not (self.lastWorn and self.lastWorn[id]) then
         local listed = false
-        for _, event in ipairs(j.events) do if event[2] == id then listed = true end end
+        for _, event in ipairs(journal.events) do
+          if event[2] == id then listed = true end
+        end
         if not listed then
-          if #j.events >= M.JOURNAL then self.full = true
-          else j.events[#j.events + 1] = {j.next, id, name}; j.next = j.next + 1; changed = true end
+          if #journal.events >= M.JOURNAL then
+            self.full = true
+          else
+            journal.events[#journal.events + 1] = {journal.next, id, name}
+            journal.next = journal.next + 1
+            changed = true
+          end
         end
       end
       worn[id] = true
@@ -199,7 +242,8 @@ function M.new(store)
     local pouch, pouchVia = M.container(M.POUCH)
     -- The varbit list is found once per login; a failed search waits ten minutes to try again.
     if not self.beltVars and (not self.beltTriedAt or now - self.beltTriedAt >= M.BELT_RETRY) then
-      self.beltTriedAt = now; self.beltVars = M.beltVars()
+      self.beltTriedAt = now
+      self.beltVars = M.beltVars()
     end
     self.worn, self.backpack, self.pouch, self.toolbelt = worn, backpack, pouch, M.belt(self.beltVars)
     self.via = {worn = wornVia, backpack = backpackVia, pouch = pouchVia}
@@ -207,11 +251,18 @@ function M.new(store)
     self.read = true
     self.state = (worn or backpack) and "read" or "unavailable"
   end
-  function self:login(now) self:reset(); self:readNow(now) end
+  function self:login(now)
+    self:reset()
+    self:readNow(now)
+  end
   -- Inventory events fire for every container, so they only bring the next read forward.
-  function self:inventory(now) if self.readAt then self.promptAt = self.promptAt or now + M.DELAY end end
+  function self:inventory(now)
+    if self.readAt then self.promptAt = self.promptAt or now + M.DELAY end
+  end
   function self:tick(now)
-    if (self.promptAt and now >= self.promptAt) or (self.readAt and now - self.readAt >= M.PERIOD) then self:readNow(now) end
+    if (self.promptAt and now >= self.promptAt) or (self.readAt and now - self.readAt >= M.PERIOD) then
+      self:readNow(now)
+    end
   end
   -- The items field for the next report, or nil when the picker has this reading and journal.
   -- extras.pouch and extras.toolbelt add those fields, for a picker that accepts them. The
@@ -226,29 +277,39 @@ function M.new(store)
       return hex16(json.encode(list))
     end
     self.snapshot = content(self.toolbelt)
-    local j, acked = self.journal, self.acked
-    local last = j.events[#j.events] and j.events[#j.events][1] or 0
-    local ackedEvent = acked and type(acked.journal) == "table" and acked.journal.id == j.id and math.tointeger(acked.journal.event) or 0
+    local journal, acked = self.journal, self.acked
+    local last = journal.events[#journal.events] and journal.events[#journal.events][1] or 0
+    -- The last journal event the picker holds, 0 when it holds none from this journal.
+    local ackedEvent = acked and type(acked.journal) == "table" and acked.journal.id == journal.id
+      and math.tointeger(acked.journal.event) or 0
     if acked and acked.snapshot == self.snapshot and last <= ackedEvent then return nil end
     -- The same content again waits a minute, so a picker that keeps not acknowledging isn't flooded.
-    local key = self.snapshot .. ":" .. j.id .. ":" .. last
+    local key = self.snapshot .. ":" .. journal.id .. ":" .. last
     if key == self.sentKey and now - self.sentAt < M.RESEND then return nil end
     local events = json.array()
-    for _, event in ipairs(j.events) do if event[1] > ackedEvent then events[#events + 1] = json.array({event[1], event[2], event[3]}) end end
-    local items = {snapshot = self.snapshot, worn = self.worn or json.null, backpack = self.backpack or json.null,
-      journal = {id = j.id, events = events}}
+    for _, event in ipairs(journal.events) do
+      if event[1] > ackedEvent then events[#events + 1] = json.array({event[1], event[2], event[3]}) end
+    end
+    local items = {snapshot = self.snapshot,
+      worn = self.worn or json.null, backpack = self.backpack or json.null,
+      journal = {id = journal.id, events = events}}
     if extras.pouch then items.pouch = self.pouch or json.null end
     if extras.toolbelt then items.toolbelt = self.toolbelt or json.null end
     -- Reports stop at 16 KB. The newest journal events wait for a later report, then the tool
     -- belt goes as unreadable; containers that alone are too big are held, with a diagnostic.
     while #events > 0 and #json.encode(items) > M.MAX_BYTES do events[#events] = nil end
     if #json.encode(items) > M.MAX_BYTES and extras.toolbelt and self.toolbelt then
-      items.toolbelt = json.null; self.snapshot = content(nil); items.snapshot = self.snapshot
-      key = self.snapshot .. ":" .. j.id .. ":" .. last
+      items.toolbelt = json.null
+      self.snapshot = content(nil)
+      items.snapshot = self.snapshot
+      key = self.snapshot .. ":" .. journal.id .. ":" .. last
       if acked and acked.snapshot == self.snapshot and last <= ackedEvent then return nil end
       if key == self.sentKey and now - self.sentAt < M.RESEND then return nil end
     end
-    if #json.encode(items) > M.MAX_BYTES then self.state = "too large to send; held"; return nil end
+    if #json.encode(items) > M.MAX_BYTES then
+      self.state = "too large to send; held"
+      return nil
+    end
     return items, key
   end
   function self:sent(key, now) self.sentKey, self.sentAt = key, now end
@@ -257,25 +318,38 @@ function M.new(store)
   function self:sync(status, now)
     if type(status) ~= "table" then return end
     local held = status.items
-    if type(held) ~= "table" then self.acked = nil; return end
+    if type(held) ~= "table" then
+      self.acked = nil
+      return
+    end
     self.acked = held
     if held.snapshot == self.snapshot then self.state = "sent" end
-    local j = self.journal
+    local journal = self.journal
     local ack = type(held.journal) == "table" and held.journal
-    local event = ack and ack.id == (j and j.id) and math.tointeger(ack.event)
+    local event = ack and ack.id == (journal and journal.id) and math.tointeger(ack.event)
     if not event then return end
     local kept = {}
-    for _, row in ipairs(j.events) do if row[1] > event then kept[#kept + 1] = row end end
-    if #kept ~= #j.events then j.events = kept; self.full = false; self:save() end
+    for _, row in ipairs(journal.events) do
+      if row[1] > event then kept[#kept + 1] = row end
+    end
+    if #kept ~= #journal.events then
+      journal.events = kept
+      self.full = false
+      self:save()
+    end
   end
-  function self:refused(now) self.refusedUntil, self.sentKey, self.state = now + M.REFUSED, nil, "refused by picker" end
+  function self:refused(now)
+    self.refusedUntil, self.sentKey, self.state = now + M.REFUSED, nil, "refused by picker"
+  end
   function self:describe()
     local function count(rows, via) return rows and (#rows .. " via " .. tostring(via)) or "unreadable" end
-    local j = self.journal
-    return self.state .. "; worn=" .. count(self.worn, self.via.worn) .. "; backpack=" .. count(self.backpack, self.via.backpack)
+    local journal = self.journal
+    return self.state .. "; worn=" .. count(self.worn, self.via.worn)
+      .. "; backpack=" .. count(self.backpack, self.via.backpack)
       .. "; pouch=" .. (self.pouch and (M.coins(self.pouch) .. " coins") or "unreadable")
       .. "; belt=" .. (self.toolbelt and #self.toolbelt or "unreadable")
-      .. "; journal=" .. (j and (#j.events .. (j.owner and (self.saved == false and " (not saved)" or "") or " (memory only)")) or "-")
+      .. "; journal=" .. (journal and (#journal.events
+        .. (journal.owner and (self.saved == false and " (not saved)" or "") or " (memory only)")) or "-")
       .. (self.full and "; journal full" or "")
   end
   self:reset()
