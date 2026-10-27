@@ -3,6 +3,8 @@
 -- "CP1" then one letter per choice, then the five colours as hex ("-" when unset).
 local M = {}
 M.PREFIX = "CP1"
+-- A whole code is 41 characters; anything much longer is not a look code.
+M.MAX_LENGTH = 80
 M.CHOICES = {
   {"shadeColours", {classic="c", colourblind="b", subtle="s", custom="x"}, "classic"},
   {"shadeWidth", {thin="t", normal="n", thick="k"}, "normal"},
@@ -28,10 +30,15 @@ function M.encode(get)
   return table.concat(parts, ".")
 end
 -- Returns a list of {key, kind, value} to store, or nil for anything that isn't a whole valid code.
+-- The text is pasted by the player and may come from anyone, so it is checked before any of it is used:
+-- length first, then the allowed characters, then every part. Nothing is stored unless all of it is valid.
 function M.decode(text)
-  if type(text) ~= "string" then return nil end
+  if type(text) ~= "string" or #text > M.MAX_LENGTH then return nil end
+  text = text:gsub("%s", "")
+  if text:find("[^%w%.%-]") then return nil end
+  -- Split on every dot, keeping empty parts so "CP1..x" is refused rather than read as "CP1.x".
   local parts = {}
-  for part in text:gsub("%s", ""):gmatch("[^%.]+") do parts[#parts + 1] = part end
+  for part in (text .. "."):gmatch("([^%.]*)%.") do parts[#parts + 1] = part end
   if parts[1] ~= M.PREFIX or #parts ~= 2 + #M.COLOURS or #parts[2] ~= #M.CHOICES + 1 then return nil end
   local out = {}
   for i, choice in ipairs(M.CHOICES) do

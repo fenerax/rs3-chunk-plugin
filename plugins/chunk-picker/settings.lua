@@ -268,7 +268,8 @@ function M.new(store, callbacks, options)
       page:AddText("Share your look: copy this code, or paste a partner's code and use it.")
       self.codeField=page:AddTextField({text=lookcode.encode(get),placeholder="Look code, starts CP1",maxLength=80})
       page:AddSimpleButton("Use look code",function()
-        local entries=lookcode.decode(self.codeField:GetText())
+        local ok,text=pcall(function() return self.codeField:GetText() end)
+        local entries=ok and lookcode.decode(text) or nil
         if not entries then self:message("That isn't a whole look code (it starts CP1.)"); return end
         for _,e in ipairs(entries) do store:set(e[1],e[2],e[3]) end
         if self.picker then pcall(function() self.picker:SetValue((current(target) or 0x808080)*256+0xFF,false) end) end
