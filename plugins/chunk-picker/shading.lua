@@ -11,7 +11,11 @@ M.DEBUG = false              -- beta debugging: draw through terrain, show a mar
 -- Rank decides which side of an edge colours it. Unlocked and unknown draw nothing.
 local RANK = {locked = 2, available = 1}
 -- Player-chosen looks. Colours are {locked, available}; walls are heights in fine units.
-M.COLOURS = {classic = {0xFF3B30, 0xFFB020}, colourblind = {0x2F80FF, 0xFF9F1C}, subtle = {0xA83A32, 0xB8923E}}
+M.COLOURS = {
+  classic = {0xFF3B30, 0xFFB020},
+  colourblind = {0x2F80FF, 0xFF9F1C},
+  subtle = {0xA83A32, 0xB8923E},
+}
 M.WIDTHS = {thin = 2, normal = 3, thick = 6}
 M.WALLS = {off = 0, low = 320, tall = 768}
 -- Whole-chunk fills, like the OSRS picker greying out chunks you can't use.
@@ -30,41 +34,70 @@ function M.hex(text)
   local digits = type(text) == "string" and text:match("^%s*#?(%x%x%x%x%x%x)%s*$")
   return digits and tonumber(digits, 16) or nil
 end
+-- The drawing style from the saved settings. `get(key, kind, default)` reads one setting, as
+-- store:get does; without it every setting takes its default. Unknown or incomplete values
+-- fall back to the defaults, so a bad saved value can't break the drawing.
 function M.style(get)
   get = get or function(_, _, default) return default end
   local colours = get("shadeColours", "String", "classic")
-  local customLocked, customRollable = M.hex(get("shadeRgbLocked", "String", "")), M.hex(get("shadeRgbRollable", "String", ""))
-  if not (M.COLOURS[colours] or colours == "custom" and customLocked and customRollable) then colours = "classic" end
-  local width = get("shadeWidth", "String", "normal"); if not M.WIDTHS[width] then width = "normal" end
+  local customLocked = M.hex(get("shadeRgbLocked", "String", ""))
+  local customRollable = M.hex(get("shadeRgbRollable", "String", ""))
+  if not (M.COLOURS[colours] or colours == "custom" and customLocked and customRollable) then
+    colours = "classic"
+  end
+  local width = get("shadeWidth", "String", "normal")
+  if not M.WIDTHS[width] then width = "normal" end
   -- Off by default: on beta walls over a haze box looked odd. Strong haze reads as greyed out.
-  local walls = get("shadeWalls", "String", "off"); if not M.WALLS[walls] then walls = "off" end
+  local walls = get("shadeWalls", "String", "off")
+  if not M.WALLS[walls] then walls = "off" end
   local grid = get("shadeGrid", "Bool", true) ~= false
-  local fillLocked, fillRollable = M.hex(get("shadeRgbFillLocked", "String", "")), M.hex(get("shadeRgbFillRollable", "String", ""))
+  local fillLocked = M.hex(get("shadeRgbFillLocked", "String", ""))
+  local fillRollable = M.hex(get("shadeRgbFillRollable", "String", ""))
   local locked = get("shadeFillLocked", "String", "dark")
-  if not (M.FILLS[locked] or locked == "tint" or locked == "off" or locked == "custom" and fillLocked) then locked = "dark" end
+  if not (M.FILLS[locked] or locked == "tint" or locked == "off" or locked == "custom" and fillLocked) then
+    locked = "dark"
+  end
   local rollable = get("shadeFillRollable", "String", "tint")
-  if not (rollable == "same" or rollable == "tint" or rollable == "off" or rollable == "custom" and fillRollable) then rollable = "tint" end
-  local strength = get("shadeFillStrength", "String", "strong"); if not M.FILL_ALPHA[strength] then strength = "strong" end
-  local shape = get("shadeFillStyle", "String", "haze"); if shape ~= "ground" then shape = "haze" end
-  local partner = get("shadePartner", "String", "outline"); if not M.PARTNER_MODES[partner] then partner = "outline" end
+  if not (rollable == "same" or rollable == "tint" or rollable == "off"
+      or rollable == "custom" and fillRollable) then
+    rollable = "tint"
+  end
+  local strength = get("shadeFillStrength", "String", "strong")
+  if not M.FILL_ALPHA[strength] then strength = "strong" end
+  local shape = get("shadeFillStyle", "String", "haze")
+  if shape ~= "ground" then shape = "haze" end
+  local partner = get("shadePartner", "String", "outline")
+  if not M.PARTNER_MODES[partner] then partner = "outline" end
   local partnerRgb = M.hex(get("shadeRgbPartner", "String", "")) or M.PARTNER
-  local c = colours == "custom" and {customLocked, customRollable} or M.COLOURS[colours]
-  local fill = {locked = locked == "tint" and c[1] or locked == "custom" and fillLocked or M.FILLS[locked]}
-  fill.available = rollable == "same" and fill.locked or rollable == "tint" and c[2] or rollable == "custom" and fillRollable or nil
+  -- {locked, available} border colours.
+  local border = colours == "custom" and {customLocked, customRollable} or M.COLOURS[colours]
+  local fill = {locked = locked == "tint" and border[1] or locked == "custom" and fillLocked
+    or M.FILLS[locked]}
+  fill.available = rollable == "same" and fill.locked or rollable == "tint" and border[2]
+    or rollable == "custom" and fillRollable or nil
   fill.partner = partner == "tint" and partnerRgb or nil
-  return {rgb = {[2] = c[1], [1] = c[2], partner = partnerRgb}, width = M.WIDTHS[width], wall = M.WALLS[walls], grid = grid,
+  -- rgb is indexed by RANK (2 locked, 1 available), plus "partner".
+  return {rgb = {[2] = border[1], [1] = border[2], partner = partnerRgb},
+    width = M.WIDTHS[width], wall = M.WALLS[walls], grid = grid,
     partner = partner,
     -- Bright tints read far heavier than dark ones (beta: amber at medium looked like a solid wall),
     -- so a rollable chunk in its own colour gets half the strength; you still want to see into it.
-    fill = fill, fillAlpha = M.FILL_ALPHA[strength], tintAlpha = M.FILL_ALPHA[strength] // 2, haze = shape == "haze" and M.HAZE or 0,
+    fill = fill, fillAlpha = M.FILL_ALPHA[strength], tintAlpha = M.FILL_ALPHA[strength] // 2,
+    haze = shape == "haze" and M.HAZE or 0,
+    -- Everything above as one string; a changed key rebuilds the geometry.
     key = table.concat({colours, width, walls, tostring(grid), locked, rollable, strength, shape,
-      colours == "custom" and c[1] .. "," .. c[2] or "", locked == "custom" and fillLocked or "", rollable == "custom" and fillRollable or "",
+      colours == "custom" and border[1] .. "," .. border[2] or "",
+      locked == "custom" and fillLocked or "",
+      rollable == "custom" and fillRollable or "",
       partner, partner ~= "off" and partnerRgb or ""}, "/")}
 end
 local ALPHA = {line = 0xE6, grid = 0x80, wallBase = 0x70, wallTop = 0x00}
 local function rgba(rgb, alpha) return rgb * 256 + alpha end
 
-local function square(id) return math.type(id) == "integer" and id >= 0 and id // 256 <= 199 and id % 256 <= 199 end
+-- A map square id (x * 256 + z) on the 200x200 world map.
+local function square(id)
+  return math.type(id) == "integer" and id >= 0 and id // 256 <= 199 and id % 256 <= 199
+end
 -- Map square id -> state, from net.lua's checked `nearby` map. Older pickers send only the
 -- current chunk, so fall back to it.
 function M.rows(status)
@@ -72,11 +105,15 @@ function M.rows(status)
   local rows, count = {}, 0
   if type(status.nearby) == "table" then
     for id, state in pairs(status.nearby) do
-      if square(id) and type(state) == "string" then rows[id] = state; count = count + 1 end
+      if square(id) and type(state) == "string" then
+        rows[id] = state
+        count = count + 1
+      end
     end
   end
   if count > 0 then return rows end
-  local id = type(status.chunkId) == "string" and status.chunkId:match("^%d+$") and math.tointeger(tonumber(status.chunkId))
+  local id = type(status.chunkId) == "string" and status.chunkId:match("^%d+$")
+    and math.tointeger(tonumber(status.chunkId))
   if id and square(id) and RANK[status.state] then return {[id] = status.state} end
   return nil
 end
@@ -98,23 +135,31 @@ function M.geometry(rows, height, style)
   local minX, minZ
   for id in pairs(rows) do
     local x, z = id // 256, id % 256
-    minX = math.min(minX or x, x); minZ = math.min(minZ or z, z)
+    minX = math.min(minX or x, x)
+    minZ = math.min(minZ or z, z)
   end
-  local out = {positions = {}, rgba = {}, lines = {}, tris = {}, parts = {}, edges = 0, walls = 0, fills = 0, missing = 0,
+  -- parts holds index ranges into positions, lines and tris, one per edge or fill; see M.split.
+  local out = {positions = {}, rgba = {}, lines = {}, tris = {}, parts = {},
+    edges = 0, walls = 0, fills = 0, missing = 0,
     originX = (minX or 0) * M.TILES * M.TILE, originZ = (minZ or 0) * M.TILES * M.TILE}
   if not minX then return out end
+  -- Terrain heights, cached per tile; false marks a tile already found unloaded.
   local cache = {}
   local function ground(tx, tz)
     local key = tx * 16384 + tz
     local h = cache[key]
-    if h == nil then h = height(tx, tz) or false; cache[key] = h end
+    if h == nil then
+      h = height(tx, tz) or false
+      cache[key] = h
+    end
     return h or nil
   end
+  -- Adds a point and returns its 0-based index.
   local function vertex(tx, tz, y, colour)
-    local p = out.positions
-    p[#p + 1] = {tx * M.TILE - out.originX, y, tz * M.TILE - out.originZ}
+    local positions = out.positions
+    positions[#positions + 1] = {tx * M.TILE - out.originX, y, tz * M.TILE - out.originZ}
     out.rgba[#out.rgba + 1] = colour
-    return #p - 1
+    return #positions - 1
   end
   -- An edge runs 64 tiles from (tx,tz) along +x (dx=1) or +z (dz=1).
   local function edge(tx, tz, dx, dz, rank, boundary)
@@ -130,7 +175,9 @@ function M.geometry(rows, height, style)
       local x, z = tx + dx * step, tz + dz * step
       local h = ground(x, z)
       if not h then
-        out.missing = out.missing + 1; previous = nil
+        -- An unloaded tile breaks the line; the build is retried once terrain loads.
+        out.missing = out.missing + 1
+        previous = nil
       else
         local line = vertex(x, z, h + M.LIFT, lineColour)
         local base, top
@@ -139,12 +186,16 @@ function M.geometry(rows, height, style)
           top = vertex(x, z, h + style.wall, rgba(rgb, ALPHA.wallTop))
         end
         if previous then
-          local l = out.lines; l[#l + 1] = previous; l[#l + 1] = line
+          local lines = out.lines
+          lines[#lines + 1] = previous
+          lines[#lines + 1] = line
           if wall then
             -- Both windings, so the wall shows from either side whatever the culling mode.
-            local t = out.tris
+            local tris = out.tris
             for _, v in ipairs({previousBase, base, top, previousBase, top, previousTop,
-                                previousBase, top, base, previousBase, previousTop, top}) do t[#t + 1] = v end
+                                previousBase, top, base, previousBase, previousTop, top}) do
+              tris[#tris + 1] = v
+            end
           end
         end
         previous, previousBase, previousTop = line, base, top
@@ -152,7 +203,8 @@ function M.geometry(rows, height, style)
     end
     if wall then out.walls = out.walls + 1 end
     if #out.lines > l0 or #out.tris > t0 then
-      out.parts[#out.parts + 1] = {p0 = p0, p1 = #out.positions, l0 = l0, l1 = #out.lines, t0 = t0, t1 = #out.tris}
+      out.parts[#out.parts + 1] = {p0 = p0, p1 = #out.positions, l0 = l0, l1 = #out.lines,
+        t0 = t0, t1 = #out.tris}
     end
   end
   -- A coarse terrain-following sheet over one chunk, both windings like the walls.
@@ -168,17 +220,21 @@ function M.geometry(rows, height, style)
     for i = 0, n do
       for j = 0, n do
         local h = ground(tx + i * step, tz + j * step)
-        if h then index[i * (n + 1) + j] = vertex(tx + i * step, tz + j * step, h + lift, colour)
-        else out.missing = out.missing + 1 end
+        if h then
+          index[i * (n + 1) + j] = vertex(tx + i * step, tz + j * step, h + lift, colour)
+        else
+          out.missing = out.missing + 1
+        end
       end
     end
-    local t = out.tris
+    local tris = out.tris
+    -- Two triangles per grid cell (corners a, b, c, d going round), skipped where a corner is unloaded.
     for i = 0, n - 1 do
       for j = 0, n - 1 do
         local a, b = index[i * (n + 1) + j], index[(i + 1) * (n + 1) + j]
         local c, d = index[(i + 1) * (n + 1) + j + 1], index[i * (n + 1) + j + 1]
         if a and b and c and d then
-          for _, v in ipairs({a, b, c, a, c, d, a, c, b, a, d, c}) do t[#t + 1] = v end
+          for _, v in ipairs({a, b, c, a, c, d, a, c, b, a, d, c}) do tris[#tris + 1] = v end
         end
       end
     end
@@ -186,6 +242,7 @@ function M.geometry(rows, height, style)
       -- Curtains close the box only toward chunks with a different (or no) fill, so neighbouring
       -- locked chunks read as one continuous haze. Chunks beyond the nearby block stay open.
       local cx, cz = id // 256, id % 256
+      -- {neighbour id, step x, step z, start x, start z}, in fill-sample units.
       local sides = {{cz > 0 and id - 1, 1, 0, 0, 0}, {cz < 199 and id + 1, 1, 0, 0, n},
         {cx > 0 and id - 256, 0, 1, 0, 0}, {cx < 199 and id + 256, 0, 1, n, 0}}
       for _, side in ipairs(sides) do
@@ -199,11 +256,14 @@ function M.geometry(rows, height, style)
               local base, top = vertex(x, z, h + M.FILL_LIFT, colour), vertex(x, z, h + style.haze, colour)
               if previousBase then
                 for _, v in ipairs({previousBase, base, top, previousBase, top, previousTop,
-                                    previousBase, top, base, previousBase, previousTop, top}) do t[#t + 1] = v end
+                                    previousBase, top, base, previousBase, previousTop, top}) do
+                  tris[#tris + 1] = v
+                end
               end
               previousBase, previousTop = base, top
             else
-              out.missing = out.missing + 1; previousBase = nil
+              out.missing = out.missing + 1
+              previousBase = nil
             end
           end
         end
@@ -211,10 +271,15 @@ function M.geometry(rows, height, style)
     end
     if #out.tris > t0 then
       out.fills = out.fills + 1
-      out.parts[#out.parts + 1] = {p0 = p0, p1 = #out.positions, l0 = #out.lines, l1 = #out.lines, t0 = t0, t1 = #out.tris}
+      out.parts[#out.parts + 1] = {p0 = p0, p1 = #out.positions, l0 = #out.lines, l1 = #out.lines,
+        t0 = t0, t1 = #out.tris}
     end
   end
-  local function rank(id) local s = rows[id]; return s and (RANK[s] or 0) or nil end
+  -- A chunk's rank, 0 for states that draw nothing, nil outside the rows.
+  local function rank(id)
+    local state = rows[id]
+    return state and (RANK[state] or 0) or nil
+  end
   local ids = {}
   for id in pairs(rows) do ids[#ids + 1] = id end
   table.sort(ids)
@@ -224,18 +289,24 @@ function M.geometry(rows, height, style)
     local own = RANK[state] or 0
     local tx, tz = cx * M.TILES, cz * M.TILES
     -- Each shared edge belongs to the chunk north or east of it; perimeter edges to the inside chunk.
+    -- {start x, start z, dx, dz, neighbour rank, neighbour id}
     local sides = {
       {tx, tz, 1, 0, cz > 0 and rank(id - 1) or nil, cz > 0 and id - 1},              -- south
       {tx, tz, 0, 1, cx > 0 and rank(id - 256) or nil, cx > 0 and id - 256},          -- west
     }
-    if not (cz < 199 and rank(id + 1)) then sides[#sides + 1] = {tx, tz + M.TILES, 1, 0, nil} end       -- north
-    if not (cx < 199 and rank(id + 256)) then sides[#sides + 1] = {tx + M.TILES, tz, 0, 1, nil} end     -- east
+    if not (cz < 199 and rank(id + 1)) then
+      sides[#sides + 1] = {tx, tz + M.TILES, 1, 0, nil}                               -- north
+    end
+    if not (cx < 199 and rank(id + 256)) then
+      sides[#sides + 1] = {tx + M.TILES, tz, 0, 1, nil}                               -- east
+    end
     for _, side in ipairs(sides) do
       local other = side[5]
       local top = math.max(own, other or 0)
       -- A wall marks where the state changes; matching or unseen neighbours get a faint grid line.
       if top > 0 then edge(side[1], side[2], side[3], side[4], top, other ~= nil and other ~= own)
-      elseif other ~= nil and style.partner == "outline" and (state == "partner") ~= (rows[side[6]] == "partner") then
+      elseif other ~= nil and style.partner == "outline"
+        and (state == "partner") ~= (rows[side[6]] == "partner") then
         -- Between your own open chunk and one only your partner opened.
         edge(side[1], side[2], side[3], side[4], "partner", true)
       end
@@ -250,19 +321,20 @@ end
 
 -- One shape per edge, anchored at the edge's middle vertex. On beta a single shape covering
 -- the whole 5x5 block (4,808 points) drew nothing while a 4-point square drew fine.
-function M.split(g)
+function M.split(geometry)
   local parts = {}
-  for _, r in ipairs(g.parts) do
-    local mid = g.positions[r.p0 + (r.p1 - r.p0) // 2 + 1]
+  for _, range in ipairs(geometry.parts) do
+    local mid = geometry.positions[range.p0 + (range.p1 - range.p0) // 2 + 1]
     local part = {positions = {}, rgba = {}, lines = {}, tris = {},
-      originX = g.originX + mid[1], originZ = g.originZ + mid[3]}
-    for i = r.p0 + 1, r.p1 do
-      local p = g.positions[i]
+      originX = geometry.originX + mid[1], originZ = geometry.originZ + mid[3]}
+    for i = range.p0 + 1, range.p1 do
+      local p = geometry.positions[i]
       part.positions[#part.positions + 1] = {p[1] - mid[1], p[2], p[3] - mid[3]}
-      part.rgba[#part.rgba + 1] = g.rgba[i]
+      part.rgba[#part.rgba + 1] = geometry.rgba[i]
     end
-    for i = r.l0 + 1, r.l1 do part.lines[#part.lines + 1] = g.lines[i] - r.p0 end
-    for i = r.t0 + 1, r.t1 do part.tris[#part.tris + 1] = g.tris[i] - r.p0 end
+    -- Indices are rebased so each part counts its points from 0.
+    for i = range.l0 + 1, range.l1 do part.lines[#part.lines + 1] = geometry.lines[i] - range.p0 end
+    for i = range.t0 + 1, range.t1 do part.tris[#part.tris + 1] = geometry.tris[i] - range.p0 end
     parts[#parts + 1] = part
   end
   return parts
@@ -276,6 +348,7 @@ function M.new(options)
       and type(World) == "table" and type(World.GetGroundHeight) == "function"
   end
   self.shapes = {}
+  -- The i-th shape instance, reused while valid; named so a reload finds the old one.
   local function instance(i)
     local name = M.NAME .. "-" .. i
     local current = self.shapes[i]
@@ -283,19 +356,30 @@ function M.new(options)
       local ok, valid = pcall(function() return current.isValid end)
       if ok and valid ~= false then return current end
     end
-    local ok, value = pcall(function() return ShapeList.GetInstance(name) or ShapeList.CreateInstance(name) end)
+    local ok, value = pcall(function()
+      return ShapeList.GetInstance(name) or ShapeList.CreateInstance(name)
+    end)
     self.shapes[i] = ok and value or nil
     return self.shapes[i]
   end
+  -- Hides shapes from index `from` on; they are kept for reuse rather than destroyed.
   local function hide(from)
-    for i = from, #self.shapes do local s = self.shapes[i]; if s then pcall(function() s.visible = false end) end end
+    for i = from, #self.shapes do
+      local shape = self.shapes[i]
+      if shape then pcall(function() shape.visible = false end) end
+    end
   end
   function self:clear(state)
-    self.signature = nil; self.incomplete = false; self.edges = 0; self.walls = 0; self.fills = 0
+    self.signature = nil
+    self.incomplete = false
+    self.edges = 0
+    self.walls = 0
+    self.fills = 0
     if state then self.state = state end
     hide(1)
   end
   function self:worldChanged() if self.incomplete then self.retry = true end end
+  -- Called every tick and on settings changes; cheap unless something the drawing depends on changed.
   function self:update(position, status, now)
     now = now or 0
     if options.enabled and not options.enabled() then return self:clear("off") end
@@ -327,8 +411,11 @@ function M.new(options)
       if ok == false or type(h) ~= "number" or h < 0 then return nil end
       return h
     end, style)
-    self.builtAt = now; self.incomplete = geometry.missing > 0
-    self.edges = geometry.edges; self.walls = geometry.walls; self.fills = geometry.fills
+    self.builtAt = now
+    self.incomplete = geometry.missing > 0
+    self.edges = geometry.edges
+    self.walls = geometry.walls
+    self.fills = geometry.fills
     local parts = M.split(geometry)
     if #parts == 0 then
       hide(1)
@@ -338,25 +425,34 @@ function M.new(options)
     local drawn, rejected = 0, 0
     for i, part in ipairs(parts) do
       local shape = instance(i)
-      if not shape then self.state = "could not create shape instance"; hide(i); return end
+      if not shape then
+        self.state = "could not create shape instance"
+        hide(i)
+        return
+      end
       local data = ShapeData.new()
       local positions = {}
       for j, p in ipairs(part.positions) do positions[j] = Vector3.new(p[1], p[2], p[3]) end
-      data.positions = positions; data.rgba = part.rgba
+      data.positions = positions
+      data.rgba = part.rgba
       if #part.lines > 0 then data.lines = part.lines end
       if #part.tris > 0 then data.tris = part.tris end
       if shape:SetShapeData(data) == false then
-        rejected = rejected + 1; shape.visible = false
+        rejected = rejected + 1
+        shape.visible = false
       else
         shape.translation = Vector3.new(part.originX, 0, part.originZ)
         -- Debug builds draw through terrain; normal builds let buildings and trees hide the lines.
-        shape.lineWidth = style.width; shape.ignoreDepth = M.DEBUG; shape.visible = true
+        shape.lineWidth = style.width
+        shape.ignoreDepth = M.DEBUG
+        shape.visible = true
         drawn = drawn + 1
       end
     end
     hide(#parts + 1)
     self.parts = #parts
-    self.state = (drawn > 0 and "drawn" or "shape data rejected") .. (self.incomplete and " (some terrain not loaded)" or "")
+    self.state = (drawn > 0 and "drawn" or "shape data rejected")
+      .. (self.incomplete and " (some terrain not loaded)" or "")
     local largest = 0
     for _, part in ipairs(parts) do largest = math.max(largest, #part.positions) end
     self.debug = string.format("parts=%d drawn=%d rejected=%d largest=%d points; first at %d,%d",
@@ -373,18 +469,23 @@ function M.new(options)
       local p = Player.GetEntity().position
       local floor = Player.GetEntity().coordGrid.level
       local h = World.GetGroundHeight(floor, math.floor(p.x), math.floor(p.z))
-      self.player = string.format("player=%.0f,%.0f,%.0f ground=%s floor=%s", p.x, p.y, p.z, tostring(h), tostring(floor))
-      local m = ShapeList.GetInstance(M.NAME .. "-marker")
-      if not m then
-        m = ShapeList.CreateInstance(M.NAME .. "-marker")
+      self.player = string.format("player=%.0f,%.0f,%.0f ground=%s floor=%s",
+        p.x, p.y, p.z, tostring(h), tostring(floor))
+      local marker = ShapeList.GetInstance(M.NAME .. "-marker")
+      if not marker then
+        marker = ShapeList.CreateInstance(M.NAME .. "-marker")
         local data = ShapeData.new()
-        data.positions = {Vector3.new(-250, 0, -250), Vector3.new(250, 0, -250), Vector3.new(250, 0, 250), Vector3.new(-250, 0, 250)}
+        data.positions = {Vector3.new(-250, 0, -250), Vector3.new(250, 0, -250),
+          Vector3.new(250, 0, 250), Vector3.new(-250, 0, 250)}
         data.lines = {0, 1, 1, 2, 2, 3, 3, 0}
-        m:SetShapeData(data)
-        m.colour = 0xFFFF00FF; m.lineWidth = 6; m.ignoreDepth = true
+        marker:SetShapeData(data)
+        marker.colour = 0xFFFF00FF
+        marker.lineWidth = 6
+        marker.ignoreDepth = true
       end
-      m.translation = Vector3.new(p.x, p.y + 40, p.z)
-      self.markerState = "marker valid=" .. tostring(m.isValid) .. " data=" .. tostring(m.hasData) .. " visible=" .. tostring(m.visible)
+      marker.translation = Vector3.new(p.x, p.y + 40, p.z)
+      self.markerState = "marker valid=" .. tostring(marker.isValid) .. " data=" .. tostring(marker.hasData)
+        .. " visible=" .. tostring(marker.visible)
     end)
   end
   function self:debugLines()
@@ -394,9 +495,11 @@ function M.new(options)
     if self.markerState then lines[#lines + 1] = "Shading " .. self.markerState end
     if self.shapes[1] then
       pcall(function()
-        local s, t = self.shapes[1], self.shapes[1].translation
-        lines[#lines + 1] = string.format("Shading instance valid=%s data=%s visible=%s depth=%s at=%.0f,%.0f,%.0f",
-          tostring(s.isValid), tostring(s.hasData), tostring(s.visible), tostring(s.ignoreDepth), t.x, t.y, t.z)
+        local shape, at = self.shapes[1], self.shapes[1].translation
+        lines[#lines + 1] = string.format(
+          "Shading instance valid=%s data=%s visible=%s depth=%s at=%.0f,%.0f,%.0f",
+          tostring(shape.isValid), tostring(shape.hasData), tostring(shape.visible),
+          tostring(shape.ignoreDepth), at.x, at.y, at.z)
       end)
     end
     local ok, all = pcall(function() return ShapeList.GetAllInstances() end)
@@ -405,7 +508,7 @@ function M.new(options)
   end
   function self:destroy()
     self:clear("stopped")
-    for _, s in ipairs(self.shapes) do pcall(function() ShapeList.DestroyInstance(s) end) end
+    for _, shape in ipairs(self.shapes) do pcall(function() ShapeList.DestroyInstance(shape) end) end
     pcall(function() ShapeList.DestroyInstance(M.NAME .. "-marker") end)
     self.shapes = {}
   end

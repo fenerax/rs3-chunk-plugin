@@ -1,8 +1,13 @@
--- Read only the logged-in player's skills and quest status. No proxy enters a payload.
+-- Reads only the logged-in player's skill levels and quest status, for the picker's skill and
+-- quest reports. Values are copied into plain tables: no client proxy object ever enters a payload.
+-- Skills are read in full at login, then one at a time from SkillTransmit events. Quests are
+-- re-read when one of their progress vars changes (VarTransmit), or every three minutes when
+-- some quest has no var to watch.
 local json = require("json")
 local M = {}
 local Progress = {}
 Progress.__index = Progress
+-- Skill ids 0-28 in order; names[id + 1] is also the key the picker expects.
 local names = {
     "ATTACK", "DEFENCE", "STRENGTH", "HITPOINTS", "RANGED", "PRAYER", "MAGIC",
     "COOKING", "WOODCUTTING", "FLETCHING", "FISHING", "FIREMAKING", "CRAFTING",
@@ -10,6 +15,7 @@ local names = {
     "RUNECRAFTING", "HUNTER", "CONSTRUCTION", "SUMMONING", "DUNGEONEERING",
     "DIVINATION", "INVENTION", "ARCHAEOLOGY", "NECROMANCY",
 }
+-- Client objects can throw on a missing field, so every read is guarded.
 local function get(object, key)
     local ok, value = pcall(function() return object[key] end)
     if ok then return value end
@@ -39,6 +45,7 @@ local function equal(a, b)
     for k in pairs(b) do if a[k] == nil then return false end end
     return true
 end
+-- Deep copy that keeps json.array markers, so an empty quest list still encodes as [].
 local function copy(value)
     if type(value) ~= "table" then return value end
     local result = getmetatable(value) and json.array() or {}
@@ -59,6 +66,7 @@ local function skillValue(skill)
         return {level = level, xp = xp}
     end
 end
+-- Normal quests only: no deprecated, tutorial or seasonal entries.
 local function normalQuest(quest)
     if quest == nil or get(quest, "deprecated") == true then return false end
     local kind = get(quest, "type")
@@ -69,6 +77,9 @@ local function normalQuest(quest)
     local text = tostring(kind or ""):upper()
     return not text:find("TUTORIAL") and not text:find("SEASONAL")
 end
+-- Finds every normal quest config. The client has offered the list in different places, so
+-- this tries config.Quest, then the id.Quest table, then probing FromID for ids 0-4095.
+-- Returns the quests and which method found them (shown in diagnostics).
 local function enumerate()
     local source = get(config, "Quest")
     local fromID = get(source, "FromID")
@@ -96,9 +107,13 @@ local function enumerate()
     end
     return quests, #quests > 0 and "FromID(0..4095)" or "unavailable"
 end
+-- Var objects may be fresh wrappers each time, so they are matched by id or name.
 local function varKey(variable)
     return get(variable, "id") or get(variable, "configName") or variable
 end
+-- skillDue/questDue hold back a send until that time, so a burst of changes goes as one report.
+-- questRetryAt/questRetryDue are set while a quest read was incomplete; nextQuestRetry while
+-- no quests could be found at all.
 function Progress:reset()
     self.skills, self.quests, self.questConfigs, self.varQuests, self.questStatus = {}, nil, {}, {}, {}
     self.skillDirty, self.questDirty, self.skillDue, self.questDue = {}, false, nil, nil
@@ -112,6 +127,10 @@ function M.new()
     self:reset()
     return self
 end
+-- Reads quest status into a sorted {finished, started} snapshot of names. `matching` limits the
+-- fresh reads to the quests one var change affects; the rest reuse their last status.
+-- A changed snapshot is sent `delay` seconds later. Returns false if a quest couldn't be read
+-- or none are known.
 function Progress:readQuests(now, delay, matching)
     local snapshot = {finished = json.array(), started = json.array()}
     local statuses = {}
@@ -145,6 +164,8 @@ function Progress:readQuests(now, delay, matching)
     self.lastQuestCheck = now
     return true
 end
+-- Full read after login. Returns true once skills and quests are both complete; until then
+-- loginPending stays set and tick() calls this again.
 function Progress:login(now)
     self.loginPending = true
     if not available() then return false end
@@ -155,6 +176,7 @@ function Progress:login(now)
         if value then skills[names[n + 1]], count = value, count + 1 end
     end
     self.skillCount = count
+    -- All 29 or nothing, so a half-loaded client never sends a partial set.
     if count ~= 29 then return false end
     for name, value in pairs(skills) do
         if not equal(value, self.skills[name]) then
@@ -166,6 +188,7 @@ function Progress:login(now)
     if #self.questConfigs == 0 then self.questConfigs, self.questMethod = enumerate() end
     self.nextQuestRetry = #self.questConfigs == 0 and now + 5 or nil
     self.questCount, self.varQuests = #self.questConfigs, {}
+    -- Map each quest's progress vars back to the quest, so a VarTransmit re-reads just those.
     local mapped = 0
     for _, quest in ipairs(self.questConfigs) do
         local hasMapping = false
@@ -187,6 +210,7 @@ function Progress:login(now)
     self.loginPending = not questsReady
     return questsReady
 end
+-- A SkillTransmit event: re-read that one skill and send it ten seconds later.
 function Progress:skill(event, now)
     if self.skillCount ~= 29 or not available() then return end
     local skill = get(event, "skill")
@@ -208,6 +232,8 @@ function Progress:var(event, now)
         self:readQuests(now, 30, self.varQuests[varKey(variable)])
     end
 end
+-- Each game tick: finish a pending login, retry an incomplete quest read, and poll quests
+-- every three minutes when some quest has no var to watch.
 function Progress:tick(now)
     if self.loginPending then self:login(now); return end
     if not available() then return end
@@ -219,11 +245,14 @@ function Progress:tick(now)
         self:readQuests(now, 0)
     end
 end
+-- Marks everything as unsent, for a new connection.
 function Progress:resend(now)
     for name in pairs(self.skills) do self.skillDirty[name] = true end
     if next(self.skillDirty) then self.skillDue = now end
     if self.quests then self.questDirty, self.questDue = true, now end
 end
+-- The skills and quests for the next report, if due and allowed by the send switches.
+-- Only changed skills go; quests always go as the whole snapshot.
 function Progress:pending(now, sendSkills, sendQuests)
     local skills, quests
     if sendSkills and next(self.skillDirty) and now >= self.skillDue then
@@ -233,6 +262,7 @@ function Progress:pending(now, sendSkills, sendQuests)
     if sendQuests and self.questDirty and now >= self.questDue then quests = copy(self.quests) end
     return skills, quests
 end
+-- The picker accepted a report. Only values that haven't changed since count as sent.
 function Progress:ack(skills, quests)
     if skills ~= nil then
         for name, value in pairs(skills) do

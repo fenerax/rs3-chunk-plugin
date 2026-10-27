@@ -6,12 +6,17 @@
 -- else in it. The picker's status names the set once it holds every part.
 local json = require("json")
 local checksum = require("achievements").checksum
-local M = {ID = 95, MAX_SLOTS = 5600, MAX_ID = 1000000, MAX_COUNT = 2147483647, PART_ROWS = 700, PART_BYTES = 12000,
-  MAX_PARTS = 8, MAX_AGE = 604800, PERIOD = 60, DELAY = 2, RESTART = 60, FRESHEN = 600, REFUSED = 1800}
+-- Times are in seconds. MAX_AGE (a week) caps the age sent; FRESHEN is how much newer a sighting
+-- must be before a set the picker already holds goes again.
+local M = {ID = 95, MAX_SLOTS = 5600, MAX_ID = 1000000, MAX_COUNT = 2147483647,
+  PART_ROWS = 700, PART_BYTES = 12000, MAX_PARTS = 8, MAX_AGE = 604800,
+  PERIOD = 60, DELAY = 2, RESTART = 60, FRESHEN = 600, REFUSED = 1800}
+-- object[key], or nil when the client throws for it.
 local function get(object, key)
   local ok, value = pcall(function() return object[key] end)
   if ok then return value end
 end
+-- The bank container, by config name when the client has one, else by the classic id.
 local function find()
   local ok, inv = pcall(function()
     local named = get(config, "Inv") and get(config.Inv, "BANK")
@@ -31,7 +36,8 @@ function M.read()
     for i = 1, total do
       local slot = inv:GetSlot(i)
       local obj, count = slot and slot.obj, slot and slot.count
-      count = type(count) == "number" and count >= 1 and count == math.floor(count) and math.tointeger(math.min(count, M.MAX_COUNT))
+      count = type(count) == "number" and count >= 1 and count == math.floor(count)
+        and math.tointeger(math.min(count, M.MAX_COUNT))
       if obj ~= nil and count then
         local id = obj
         if type(obj) ~= "number" then id = obj.id end
@@ -49,9 +55,11 @@ function M.split(rows)
   for _, row in ipairs(rows) do
     local bytes = #json.encode(row) + 1
     if #current > 0 and (#current >= M.PART_ROWS or size + bytes > M.PART_BYTES) then
-      parts[#parts + 1] = current; current, size = json.array(), 2
+      parts[#parts + 1] = current
+      current, size = json.array(), 2
     end
-    current[#current + 1] = row; size = size + bytes
+    current[#current + 1] = row
+    size = size + bytes
   end
   parts[#parts + 1] = current
   return parts
@@ -65,6 +73,8 @@ local function isBank(event)
 end
 function M.new()
   local self = {}
+  -- seenAt is when the bank was last seen open or changed; sentSeenAt is the seenAt the picker
+  -- has, from the first part of the set it holds.
   function self:reset()
     self.rows, self.snapshot, self.parts, self.sent, self.acked = nil, nil, nil, 0, false
     self.seenAt, self.sentSeenAt, self.lastPartAt = nil, nil, nil
@@ -94,7 +104,10 @@ function M.new()
     end
     self.parts, self.warning, self.state = parts, nil, "read"
   end
-  function self:login(now) self:reset(); self:readNow(now) end
+  function self:login(now)
+    self:reset()
+    self:readNow(now)
+  end
   -- Bank events mean it is open now: read it soon and count it as seen.
   -- Other containers' events (a busy backpack while skilling) wait for the minute read; an
   -- event that doesn't say which container it is still brings the read forward.
@@ -104,8 +117,10 @@ function M.new()
     if bankEvent or get(event, "inv") == nil then self.promptAt = self.promptAt or now + M.DELAY end
   end
   function self:tick(now)
-    if (self.promptAt and now >= self.promptAt) or (self.readAt and now - self.readAt >= M.PERIOD) or not self.readAt then
-      local seen = self.seenNext; self.seenNext = nil
+    if (self.promptAt and now >= self.promptAt) or (self.readAt and now - self.readAt >= M.PERIOD)
+      or not self.readAt then
+      local seen = self.seenNext
+      self.seenNext = nil
       self:readNow(now, seen)
     end
   end
@@ -118,18 +133,21 @@ function M.new()
       self.acked, self.sent = false, 0
     end
     if self.sent >= #self.parts then
-      -- Every part went but the status doesn't name the set: a picker restart. Start over, at most once a minute.
+      -- Every part went but the status doesn't name the set: a picker restart.
+      -- Start over, at most once a minute.
       if self.lastPartAt and now - self.lastPartAt < M.RESTART then return nil end
       self.sent = 0
     end
     local index = self.sent + 1
     local age = math.max(0, math.min(M.MAX_AGE, math.floor(now - self.seenAt)))
-    return {snapshot = self.snapshot, part = index, parts = #self.parts, age = age, rows = self.parts[index]}
+    return {snapshot = self.snapshot, part = index, parts = #self.parts, age = age,
+      rows = self.parts[index]}
   end
   -- A part the picker answered 200 to.
   function self:partSent(part, now)
     if part.snapshot ~= self.snapshot then return end
-    self.sent = math.max(self.sent, part.part); self.lastPartAt = now
+    self.sent = math.max(self.sent, part.part)
+    self.lastPartAt = now
     if part.part == 1 then self.sentSeenAt = self.seenAt end
     self.state = self.sent >= part.parts and "sent, waiting for the picker" or "sending"
   end
@@ -138,14 +156,21 @@ function M.new()
     local held = status.bank
     local acked = type(held) == "table" and held.snapshot == self.snapshot
     -- Only a set fully sent counts as acknowledged; the status may name an older copy of it.
-    if acked and self.sent >= #self.parts then self.acked = true; self.state = "sent"
-    elseif acked and not self.sentSeenAt then self.acked = true; self.sentSeenAt = self.seenAt; self.state = "sent"
+    if acked and self.sent >= #self.parts then
+      self.acked = true
+      self.state = "sent"
+    elseif acked and not self.sentSeenAt then
+      self.acked = true
+      self.sentSeenAt = self.seenAt
+      self.state = "sent"
     elseif not acked and self.acked then
       -- The picker forgot a set it held (a restart): offer it again.
       self.acked, self.sent, self.lastPartAt, self.state = false, #self.parts, nil, "read"
     end
   end
-  function self:refused(now) self.refusedUntil, self.sent, self.state = now + M.REFUSED, 0, "refused by picker" end
+  function self:refused(now)
+    self.refusedUntil, self.sent, self.state = now + M.REFUSED, 0, "refused by picker"
+  end
   function self:describe(now)
     if not self.rows then return "open it once this login to share it" end
     local minutes = math.floor((now - self.seenAt) / 60)

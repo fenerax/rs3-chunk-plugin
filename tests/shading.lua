@@ -76,6 +76,14 @@ eq(applied.shadeColours,'custom'); eq(applied.shadeWidth,'thick'); eq(applied.sh
 eq(applied.shadeRgbFillLocked,'')
 for _,bad in ipairs({'','CP1','CP2.cnldtmho1.-.-.-.-.-','CP1.cnldtmho.-.-.-.-.-','CP1.znldtmho1.-.-.-.-.-','CP1.cnldtmho1.12345G.-.-.-.-',
   'CP1.cnldtmho2.-.-.-.-.-'}) do eq(lookcode.decode(bad),nil) end
+-- Pasted text can be anything: wrong types, huge strings, odd characters and empty parts are refused.
+local good='CP1.cnodtsho1.-.-.-.-.-'
+eq(lookcode.decode(nil),nil)
+for _,bad in ipairs({42,{},good..'.','.'..good, good:gsub('%.%-$','..-'), 'CP1..cnodtsho1.-.-.-.-', good..string.rep(' ',80),
+  string.rep('CP1.',1000), good:gsub('1%.','1\0.',1), good:gsub('%-$','#'), good:gsub('cnod','cn\195\182d'), 'CP1.cnodtsho1.-.-.-.-.-.-',
+  'CP1.cnodtsho1.%x.-.-.-.-', 'CP1.cnodtsho1.(.).-.-.-.-'}) do eq(lookcode.decode(bad),nil) end
+eq(#lookcode.decode(good),#lookcode.CHOICES+1+#lookcode.COLOURS)
+eq(#lookcode.decode(' '..good:gsub('%.',' . ')..' '),#lookcode.CHOICES+1+#lookcode.COLOURS) -- spaces anywhere are fine
 -- Shared access: a chunk only the partner unlocked arrives as its own state.
 local duo=net.nearby(json.decode('[{"chunkId":"13613","state":"unlocked","by":"me"},{"chunkId":"13614","state":"unlocked","by":"partner"},'..
   '{"chunkId":"13612","state":"unlocked","by":"both"},{"chunkId":"13615","state":"locked","by":"partner"}]'))

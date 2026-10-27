@@ -90,15 +90,12 @@ test('the zip goes outside the repo', () => {
   assert.throws(() => build({ pluginDir: plugin({}), repoDir, outDir: repoDir, version: '0.1.0' }), /outside the repo/);
 });
 
-test('the real plugin builds or names what blocks it', () => {
-  // Today's plugin has loopback URLs, so a Hub build must refuse; a beta build may not.
-  try {
-    const result = build({ outDir: out(), version: JSON.parse(readFileSync(new URL('../plugins/chunk-picker/plugin.json', import.meta.url))).version, allowLocal: true });
-    const entries = unzip(result.zip);
-    assert.ok('main.lua' in entries && 'plugin.json' in entries);
-  } catch (error) {
-    assert.ok(error instanceof Refusal, error.message);
-    // probe.lua still sits in plugins/chunk-picker (nothing requires it); it must go before a Hub build.
-    assert.match(error.message, /Probe file must not ship: probe.lua/);
-  }
+test('the real plugin builds for beta, and a Hub build waits for the hosted picker', () => {
+  const version = JSON.parse(readFileSync(new URL('../plugins/chunk-picker/plugin.json', import.meta.url))).version;
+  const result = build({ outDir: out(), version, allowLocal: true });
+  const entries = unzip(result.zip);
+  assert.ok('main.lua' in entries && 'plugin.json' in entries);
+  assert.ok(result.warnings.some(w => /Beta build only/.test(w)), result.warnings.join('; '));
+  // Today's manifest lists only loopback servers; the hosted picker's address replaces them before submission.
+  assert.throws(() => build({ outDir: out(), version }), /Loopback server URLs/);
 });

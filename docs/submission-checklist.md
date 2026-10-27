@@ -55,8 +55,8 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
       this repo, plus a sentence on whether contributions are welcome.
 - [x] **Keep `chatAccess`?** Dropped 2026-10-27, along with the chatbox notices.
       The banners show the same messages. Bring it back only if players ask.
-- [ ] **What goes in version 1.** Smaller plugins review faster. Consider leaving
-      the bank, tool belt and coin pouch reports for a later update.
+- [x] **What goes in version 1.** Decided 2026-10-27: everything, including the
+      bank, tool belt and coin pouch reports.
 - [ ] **Name.** Check that "Chunk Picker" is free on mod.io, and say in the
       description how it differs from Chunk Borders and Chunk Tasks. Those two are
       maplescaper's Plugin Hub plugins with no licence we can see, so per the AI rules
@@ -68,20 +68,21 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 
 ## 2. Code
 
-- [ ] Remove the beta-only pieces: `probe.lua`, its diagnostics lines, and the
-      `scratch` URL in `plugin.json`.
+- [ ] Remove the beta-only pieces. `probe.lua` is gone (2026-10-27). The `scratch`
+      and `home` loopback URLs stay for beta testing until the hosted picker's
+      address replaces them; `tools/build-release.mjs` refuses a Hub build until then.
 - [ ] Readability pass. Split dense one-line statements, comment `json.lua`,
       `location.lua`, `progress.lua`, `diagnostics.lua` and `sync.lua`, and cut
       anything unused. Reviewers reject code that is "unnecessarily difficult to
       follow" or "unvetted AI generation".
-- [ ] `settings.lua` wraps PrettyUI's internal `Resize._Refresh`. Replace it with
-      PrettyUI's public API, or ask J3sven to support wider grips. Patching another
-      plugin's internals is fragile and hard to justify in review.
+- [x] `settings.lua` wrapped PrettyUI's internal `Resize._Refresh` for wider grips.
+      Removed 2026-10-27; windows use PrettyUI's own resize strips. Wider grips would
+      need J3sven to support them. `window.root` is still read for position and size.
 - [ ] PrettyUI's repo has no licence, and the guidelines forbid giving other
       plugins' code or documentation to an AI model without the author's
       permission. Ask J3sven for that permission, or stop reading PrettyUI's
       source with AI tools.
-- [ ] Treat a pasted look code (`CP1.…`) as untrusted. Check its length,
+- [x] Treat a pasted look code (`CP1.…`) as untrusted (2026-10-27). Check its length,
       character set and value ranges, and test malformed codes. A malicious
       Tilemarkers import string crashed clients (hotfix 2026-10-24).
 - [x] Show when the bank was last seen, because the game only updates it while
