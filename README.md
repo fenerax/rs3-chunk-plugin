@@ -62,8 +62,7 @@ RuneScape is a trademark of Jagex Ltd.
    ```
 
    `ppr` may show nothing; run it anyway. Grants may need repeating after the
-   client restarts. **Diagnostics** shows `http=true` once it worked. For chatbox
-   notices, do the same with `chatAccess`.
+   client restarts. **Diagnostics** shows `http=true` once it worked.
 6. In the picker, open **More → Game plugin** and create a plugin key. In the
    game, open **Chunk Picker** in the Plugin Hub's Settings, choose the server
    (**home** is a picker on `127.0.0.1:8789`), paste the key and click **Save**,
