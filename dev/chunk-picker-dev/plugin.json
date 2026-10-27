@@ -1,0 +1,7 @@
+{
+  "name": "Chunk Picker dev tools",
+  "version": "0.0.1",
+  "requiredDependencies": { "prettyui": 6398181 },
+  "requiredPermissions": [],
+  "optionalPermissions": []
+}

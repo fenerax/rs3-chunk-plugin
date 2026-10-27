@@ -4,9 +4,11 @@ const path = require('node:path');
 const vm = require(path.join(process.env.FENGARI_HOME || 'C:/Users/User/Projects/chunk-picker-rs3/.local/claude-tools/lua-harness', 'node_modules/fengari'));
 const {lua, lauxlib, lualib, to_luastring, to_jsstring} = vm;
 const root = path.resolve(__dirname, '..');
-function state() {
+// extra: more module directories, searched after the plugin's own.
+function state(extra = []) {
   const L = lauxlib.luaL_newstate(); lualib.luaL_openlibs(L);
-  const setup = `package.path = ${JSON.stringify(root.replaceAll('\\','/') + '/plugins/chunk-picker/?.lua;')} .. package.path`;
+  const dirs = ['plugins/chunk-picker', ...extra].map(d => root.replaceAll('\\','/') + '/' + d + '/?.lua;').join('');
+  const setup = `package.path = ${JSON.stringify(dirs)} .. package.path`;
   if (lauxlib.luaL_dostring(L,to_luastring(setup))) throw Error(to_jsstring(lua.lua_tostring(L,-1)));
   return L;
 }
@@ -22,11 +24,17 @@ function syntax(dir) {
     }
   }
 }
-syntax(path.join(root,'plugins')); syntax(__dirname);
+syntax(path.join(root,'plugins')); syntax(path.join(root,'dev')); syntax(__dirname);
 console.log(`Fengari syntax: ${count} Lua files passed`);
 for (const file of ['core.lua','progress.lua','shading.lua','tasks.lua','achievements.lua','items.lua','bank.lua','serverkeys.lua','lifecycle.lua']) {
   const L=state();
   if(lauxlib.luaL_dofile(L,to_luastring(path.join(__dirname,file)))) throw Error(`${file}: ${to_jsstring(lua.lua_tostring(L,-1))}`);
+  lua.lua_close(L);
+}
+// The beta-only dev tools live outside plugins/ so they can never be zipped with the plugin.
+{
+  const L=state(['dev/chunk-picker-dev']);
+  if(lauxlib.luaL_dofile(L,to_luastring(path.join(__dirname,'devtools.lua')))) throw Error(`devtools.lua: ${to_jsstring(lua.lua_tostring(L,-1))}`);
   lua.lua_close(L);
 }
 // Export requests built by the real net module for the isolated HTTP test.
