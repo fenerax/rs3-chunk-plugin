@@ -25,7 +25,8 @@ local function say(text)
 end
 
 -- Runs one cheat command, or says why not and prints it to type by hand.
-local function run(command, err)
+-- "Sent" only means the console took it; the game's reply (or error) shows in the console.
+local function run(command, err, note)
   if not command then say(err or "Couldn't build the command"); return end
   if now - lastSent < COOLDOWN then say("Wait a moment between commands"); return end
   lastSent = now
@@ -33,7 +34,7 @@ local function run(command, err)
     if type(ExecuteConsoleCommand) == "nil" then error("ExecuteConsoleCommand is missing") end
     ExecuteConsoleCommand(command)
   end)
-  if ok then say("Sent: " .. command)
+  if ok then say("Sent: " .. command .. (note or ""))
   else say("Couldn't run it (" .. tostring(failure):gsub("[%c]", " "):sub(1, 60) .. "); type: " .. command) end
 end
 
@@ -90,15 +91,23 @@ local function give(noted)
   local typed = text(fields.item)
   local name, err = cmd.itemName(typed, findName)
   if not name then say(err); return end
+  local typedId = math.tointeger(tonumber(typed))
+  local info, why = objInfo(typedId or name)
+  -- A typed name the game knows is sent as its exact configName; one it doesn't still goes,
+  -- since !give may know names config.Obj doesn't, but with a warning.
+  local note
+  if not typedId then
+    local exact = info and type(info.configName) == "string" and cmd.itemName(info.configName, findName)
+    if exact then name = exact else note = ". Couldn't check that name: if nothing arrives, type its id" end
+  end
   if noted then
-    local typedId = math.tointeger(tonumber(typed))
-    local info, why = objInfo(typedId or name)
     if not info then say("Couldn't look up " .. name .. " (" .. why .. "); try its id, e.g. 1511"); return end
     name, err = cmd.notedOf(info, objInfo)
     if not name then say(err); return end
+    note = nil
   end
   local command, bad = cmd.give(name, text(fields.count))
-  run(command, bad)
+  run(command, bad, note)
 end
 
 local function destroy()
