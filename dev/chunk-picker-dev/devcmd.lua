@@ -76,6 +76,23 @@ function M.itemName(text, find)
   if not name then return nil, "Item names are letters, digits and _ only" end
   return name
 end
+-- The noted copy of an item. ObjType has no cert link, so this leans on how the cache numbers
+-- them: the note sits next to the item (usually id + 1), has the same name, and always stacks.
+-- lookup(id) -> {id, name, configName, stackType} or nil. Returns configName, or nil and why.
+M.STACK_ALWAYS = 1
+function M.notedOf(item, lookup)
+  if type(item) ~= "table" or math.type(item.id) ~= "integer" then return nil, "Couldn't read that item" end
+  if item.stackType == M.STACK_ALWAYS then return nil, "That item already stacks; use Give" end
+  for _, near in ipairs({item.id + 1, item.id - 1}) do
+    local ok, note = pcall(lookup, near)
+    if ok and type(note) == "table" and note.name == item.name and note.stackType == M.STACK_ALWAYS
+      and note.configName ~= item.configName then
+      local name = configName(note.configName)
+      if name then return name end
+    end
+  end
+  return nil, "No noted version found for " .. tostring(item.name or item.id)
+end
 function M.give(name, countText)
   if not configName(name) then return nil, "Bad item name" end
   local count = 1

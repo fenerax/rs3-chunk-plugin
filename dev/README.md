@@ -27,6 +27,10 @@ file, a test file, anything named `dev`, or a cheat command.
   chunk, for chunk-crossing tests.
 - **Give:** an item configName (`logs`) or its numeric id (`1511`, looked up
   through `config.Obj`), and a count (default 1): `!give logs 1`.
+- **Give noted:** the same, but gives the noted copy so a big count fits
+  (`!give logs_noted 5000`, whatever its configName is). The API has no note
+  link, so it takes the item next to it (id + 1, then id - 1) that has the
+  same name and always stacks. Items that already stack say so instead.
 - **Open bank** (`!bank`) and **Where am I** (`!getcoord`, printed in the
   console).
 

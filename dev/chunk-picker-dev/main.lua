@@ -62,9 +62,25 @@ end
 local function findName(objId)
   return config.Obj.FromID(objId).configName
 end
-local function give()
+-- An ObjType's fields as a plain table, by id or configName (config.Obj.<name>), or nil.
+local function objInfo(key)
+  local ok, info = pcall(function()
+    local o = type(key) == "number" and config.Obj.FromID(key) or config.Obj[key]
+    if not o then return nil end
+    -- stackType may come back as a number or an enum value; ALWAYS is 1 either way.
+    local stack = o.stackType
+    stack = math.tointeger(tonumber(stack)) or (tostring(stack):find("ALWAYS") and cmd.STACK_ALWAYS) or stack
+    return {id = o.id, name = o.name, configName = o.configName, stackType = stack}
+  end)
+  return ok and info or nil
+end
+local function give(noted)
   local name, err = cmd.itemName(text(fields.item), findName)
   if not name then say(err); return end
+  if noted then
+    name, err = cmd.notedOf(objInfo(name), objInfo)
+    if not name then say(err); return end
+  end
   local command, bad = cmd.give(name, text(fields.count))
   run(command, bad)
 end
@@ -92,7 +108,8 @@ local function build()
     w:AddText("Give: item name or id, then a count")
     fields.item = w:AddTextField({text = "", placeholder = "logs or 1511", maxLength = 80})
     fields.count = w:AddTextField({text = "", placeholder = "Count (1)", maxLength = 10})
-    w:AddSimpleButton("Give", give, {tooltip = "!give into the backpack"})
+    w:AddSimpleButton("Give", function() give(false) end, {tooltip = "!give into the backpack"})
+    w:AddSimpleButton("Give noted", function() give(true) end, {inline = true, tooltip = "!give the noted version, so a big count fits"})
     w:AddSimpleButton("Open bank", function() run("!bank") end, {inline = true})
     w:AddSimpleButton("Where am I", function() run("!getcoord") end, {inline = true, tooltip = "Prints your coordinate in the console"})
     labels.result = w:AddText({text = "Cheats are logged by Jagex: test use only", height = 54, maxLines = 3})

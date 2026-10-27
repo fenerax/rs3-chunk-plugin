@@ -57,6 +57,21 @@ eq(cmd.itemName("logs; !tele 0,1,1", find), nil, "no second command"); eq(cmd.it
 eq(cmd.positionLine({mapSquareX = 53, mapSquareZ = 45, localX = 35, localZ = 12, level = 0}),
   "Chunk 13613 · square 53,45 · local 35,12 · floor 0", "position line")
 assert(cmd.positionLine({mapSquareX = 50, mapSquareZ = 50, localX = 1, localZ = 2, level = 1}, true):find("instance"), "instance note")
+-- Noted copies: next to the item, same name, always stacks.
+local objs = {
+  [1511] = {id = 1511, name = "Logs", configName = "logs", stackType = 0},
+  [1512] = {id = 1512, name = "Logs", configName = "logs_noted", stackType = 1},
+  [995] = {id = 995, name = "Coins", configName = "coins", stackType = 1},
+  [40] = {id = 40, name = "Thing", configName = "thing", stackType = 0},
+  [41] = {id = 41, name = "Other", configName = "other", stackType = 1},
+  [61] = {id = 61, name = "Back", configName = "back_noted", stackType = 1},
+  [62] = {id = 62, name = "Back", configName = "back", stackType = 0}}
+local function look(n) if n == 63 then error("boom") end; return objs[n] end
+eq(cmd.notedOf(objs[1511], look), "logs_noted", "the note is the next id")
+eq(cmd.notedOf(objs[62], look), "back_noted", "or the one before")
+local nn, nwhy = cmd.notedOf(objs[995], look); eq(nn, nil); assert(nwhy:find("already stacks"), "stackables say so")
+nn, nwhy = cmd.notedOf(objs[40], look); eq(nn, nil); assert(nwhy:find("Thing"), "a neighbour with another name is no note")
+eq(cmd.notedOf(nil, look), nil, "unreadable item")
 eq(cmd.positionLine(nil), "Position: waiting"); eq(cmd.positionLine({}), "Position: unreadable")
 
 -- The plugin itself, against a mock client: commands come only from buttons, never from ticks.
@@ -68,7 +83,7 @@ ui = {Interfaces = {GetComponent = function() return {width = 800, height = 600}
 id = {Component = {}}
 Player = {IsAvailable = function() return true end, GetEntity = function() return {coordGrid = here} end}
 World = {IsRegion = function() return false end}
-config = {Obj = {FromID = function(n) if n == 1511 then return {configName = "logs"} end end}}
+config = {Obj = {FromID = function(n) return objs[n] end, logs = objs[1511], coins = objs[995]}}
 Event = {}
 for _, name in ipairs({"Draw", "ServerLogic"}) do
   Event[name] = {Subscribe = function(_, fn) events[name] = fn end, Unsubscribe = function() events[name] = nil end}
@@ -94,8 +109,12 @@ tick(); buttons.N(); eq(sent[2], "!tele 0,50,51,9,56", "north keeps floor and sp
 tick(); inputs["logs or 1511"].value = "1511"; inputs["Count (1)"].value = "28"; buttons.Give()
 eq(sent[3], "!give logs 28", "give by id")
 tick(); inputs["logs or 1511"].value = "logs; !bank"; buttons.Give(); eq(#sent, 3, "a bad name sends nothing")
-tick(); buttons["Open bank"](); buttons["Where am I"](); eq(sent[4], "!bank"); eq(#sent, 4, "cooldown again")
-tick(); buttons["Where am I"](); eq(sent[5], "!getcoord")
+tick(); inputs["logs or 1511"].value = "logs"; inputs["Count (1)"].value = "5000"; buttons["Give noted"]()
+eq(sent[4], "!give logs_noted 5000", "give noted by name"); eq(#sent, 4)
+tick(); inputs["logs or 1511"].value = "coins"; buttons["Give noted"](); eq(#sent, 4, "coins have no note")
+assert(result.content:find("already stacks"), "says why")
+tick(); buttons["Open bank"](); buttons["Where am I"](); eq(sent[5], "!bank"); eq(#sent, 5, "cooldown again")
+tick(); buttons["Where am I"](); eq(sent[6], "!getcoord")
 ExecuteConsoleCommand = function() error("not allowed here") end
 tick(); buttons["Open bank"](); assert(result.content:find("type: !bank", 1, true), "a failed command is shown to type")
 PluginShutdown(); eq(events.ServerLogic, nil, "shutdown unsubscribes")
