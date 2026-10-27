@@ -18,36 +18,6 @@ function M.readable(rgb)
   local function lift(c) return math.floor(c+(255-c)*0.45) end
   return lift(r)<<16|lift(g)<<8|lift(b)
 end
--- PrettyUI's resize strips are ten units wide, half of it outside the window, with no cursor change,
--- so they're hard to find. Re-place them after each of its refreshes: further out past the edges and
--- bigger at the bottom corners (the top corners stay small so the close button and title bar still work).
-M.GRIP_OUT, M.GRIP_IN, M.GRIP_CORNER = 14, 6, 22
-function M.widen(resize)
-  if type(resize)~="table" or type(resize._Refresh)~="function" or type(resize.handles)~="table" then return false end
-  local base=resize._Refresh
-  resize._Refresh=function(self,raise)
-    base(self,raise)
-    local root,drag=self.root,self.dragState
-    -- While dragging, the grabbed strip covers the whole screen; leave everything as PrettyUI set it.
-    if not root or not self.handles or (drag and drag.captureExpanded) then return end
-    local x,y,w,h=root.x,root.y,root.width,root.height
-    local o,i,c=M.GRIP_OUT,M.GRIP_IN,M.GRIP_CORNER
-    for key,handle in pairs(self.handles) do
-      if not handle.hidden then
-        local n,s=key:find("n")~=nil,key:find("s")~=nil
-        local e,west=key:find("e")~=nil,key:find("w")~=nil
-        local depth=(s and (e or west)) and c or i
-        local hx=west and x-o or e and x+w-depth or x+(s and c or i)
-        local hw=(west or e) and o+depth or w-2*(s and c or i)
-        local hy=n and y-o or s and y+h-depth or y+i
-        local hh=(n or s) and o+depth or h-i-c
-        handle:SetPos(hx,hy); handle:SetSize(math.max(0,hw),math.max(0,hh))
-      end
-    end
-  end
-  pcall(function() resize:Refresh() end)
-  return true
-end
 -- The resizable window: smallest size, and the room its title bar and padding take from the tabs.
 -- Edges resize it (confirmed on beta), so there are no size buttons.
 M.MIN_W, M.MIN_H, M.CHROME = 360, 300, 60
@@ -324,7 +294,6 @@ function M.new(store, callbacks, options)
         -- Closing only marks it; tick() tears it down outside PrettyUI's own close handling.
         onClose=function() store:set("settingsWindow","Bool",false) end})
       self.window=window; self.view=window; self.built={x=x,y=y,w=w,h=h}
-      self.resizable=window.resize~=nil and (M.widen(window.resize) and "wide" or "narrow") or false
       fill(window,h-M.CHROME)
     end)
     -- Don't retry a window that failed to build every second; Open tries again.

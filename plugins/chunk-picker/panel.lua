@@ -93,7 +93,7 @@ function M.new(store, changed, openTasks, syncNow)
         resizable=not self.collapsed,minWidth=M.MIN_W,minHeight=self.collapsed and 30 or M.MIN_H,scrollable=false,
         onClose=function() store:set("showPanel","Bool",false); changed() end})
       self.window=w; self.x=x; self.y=y; self.width=width; self.height=height; self.pending=nil
-      self.resizable=w.resize~=nil and (require("settings").widen(w.resize) and "wide" or "narrow") or false
+      self.resizable=not self.collapsed
       if x~=savedX or y~=savedY then
         local a=store:set("panelX","Int",x); local b=store:set("panelY","Int",y)
         self.positionSaved=a and b and "yes (clamped)" or "write failed"

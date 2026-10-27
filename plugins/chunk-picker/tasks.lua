@@ -113,7 +113,6 @@ function M.new(store)
         -- Closing only marks it; tick() tears it down outside PrettyUI's own close handling.
         onClose = function() store:set("tasksWindow", "Bool", false) end})
       self.window = w; self.x = x; self.y = y; self.w = width; self.h = height
-      self.resizable = w.resize ~= nil and (require("settings").widen(w.resize) and "wide" or "narrow") or false
       w:AddSimpleButton("Here", function() choose("here") end, {tooltip = "Active tasks in the chunk you're in"})
       w:AddSimpleButton("All active", function() choose("all") end, {inline = true, tooltip = "Your whole active list"})
       w:AddSimpleButton("Back", function() self.page = math.max(1, self.page - 1) end, {inline = true})
@@ -143,7 +142,7 @@ function M.new(store)
   end
   function self:describe()
     return (self.error and ("failed: " .. self.error))
-      or (self.window and ("open, " .. self.view .. "; " .. #self.lines .. " rows; edge resize=" .. tostring(self.resizable))) or "closed"
+      or (self.window and ("open, " .. self.view .. "; " .. #self.lines .. " rows")) or "closed"
   end
   return self
 end

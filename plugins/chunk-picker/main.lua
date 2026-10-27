@@ -109,7 +109,7 @@ local function diagnosticLines()
     "127.0.0.1 reached: "..tostring(net.localhostConnected),
     "Clock: "..(net:epoch(now) and "available" or "awaiting HTTP Date"),
     "World channel: id=1; beta="..tostring(store:get("beta","Bool",true)),
-    "Panel: "..(panel.error or "ready").."; storage="..tostring(store.writeOK).."; edge resize="..tostring(panel.resizable),
+    "Panel: "..(panel.error or "ready").."; storage="..tostring(store.writeOK).."; resizable="..tostring(panel.resizable),
     "Payload: "..(net.payloadWarning or "within 16 KB"),
     "Achievements: "..achievements:describe().."; picker accepts="..tostring(net:accepts("achievements")),
     "Items: "..items:describe().."; picker accepts="..tostring(net:accepts("items"))
@@ -123,8 +123,7 @@ local function diagnosticLines()
       .."; changes="..(#permissionEvents==0 and "none" or table.concat(permissionEvents,",")),
     "Settings page: "..(#settings.failures==0 and "built" or table.concat(settings.failures,"; ")),
     "Settings window: "..(not settingsWindow.window and (settingsWindow.error and "failed" or "closed")
-      or (#settingsWindow.failures==0 and "built" or table.concat(settingsWindow.failures,"; "))
-        .."; edge resize="..tostring(settingsWindow.resizable)),
+      or (#settingsWindow.failures==0 and "built" or table.concat(settingsWindow.failures,"; "))),
   }
   for _,key in ipairs(require("store").keys) do lines[#lines+1]="DB "..key..": "..store:present(key) end
   -- Whether each server has a key of its own, never the key.
