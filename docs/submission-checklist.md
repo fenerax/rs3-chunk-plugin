@@ -29,7 +29,9 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 
 ## 1. Decisions
 
-- [ ] **Which servers the plugin can reach.** `urls` in `plugin.json` is fixed at
+- [x] **Which servers the plugin can reach.** Decided 2026-10-27: (b), the hosted
+      picker on the Canadian VPS, once it exists. Until then the manifest stays
+      on loopback for beta testing. `urls` in `plugin.json` is fixed at
       submission and shown to reviewers. Today it lists only loopback addresses,
       which reach a picker on the player's own PC and nothing else. A partner on
       another PC would need the picker's public address in the manifest, which
@@ -40,9 +42,10 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
       Loopback calls work on beta, but nobody has seen one pass review yet.
       Character Relay, a skills-to-local-listener plugin, is waiting for Jagex's
       answer (Discord, 2026-10-24).
-- [ ] **Data protection case.** Loopback-only may count as case 1 (data never
-      leaves the PC) or case 2; ask in `guidelines-questions` on the Discord.
-      A host in Canada is case 2: list the endpoints and security measures and
+      Blocked on the VPS and its domain: the address goes in `urls` before submission.
+- [x] **Data protection case.** Decided 2026-10-27: case 2. Case 1 means data never
+      leaves the player's own PC, and reports go to the hosted picker. A host in
+      Canada is case 2: list the endpoints and security measures and
       link a privacy notice. If traffic passes through a relay in the USA, it may be case 3,
       which also means sending Jagex private contact details through their form.
 - [ ] **Public contact email.** Required unless case 1. Jagex recommends an address
@@ -50,12 +53,18 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
       addresses that contain `+`.
 - [ ] **Feedback route and collaboration stance.** For example GitHub issues on
       this repo, plus a sentence on whether contributions are welcome.
-- [ ] **Keep `chatAccess`?** Every permission adds review. It only copies the
-      locked-chunk and roll notices to the chatbox, and the grant is ignored on beta.
+- [x] **Keep `chatAccess`?** Dropped 2026-10-27, along with the chatbox notices.
+      The banners show the same messages. Bring it back only if players ask.
 - [ ] **What goes in version 1.** Smaller plugins review faster. Consider leaving
       the bank, tool belt and coin pouch reports for a later update.
 - [ ] **Name.** Check that "Chunk Picker" is free on mod.io, and say in the
-      description how it differs from Chunk Borders and Chunk Tasks.
+      description how it differs from Chunk Borders and Chunk Tasks. Those two are
+      maplescaper's Plugin Hub plugins with no licence we can see, so per the AI rules
+      only a human reads their listings. maplescaper's older Bolt plugin
+      (codeberg.org/maplescaper/bolt-chunkman) is GPL-3.0: it greys the world and map
+      using unlocks it reads from the original chunk picker's public data, keeps
+      task ticks locally, and sends nothing back. Ours reports progress to the picker and gets its state,
+      partner chunk and rolls back. Don't copy its code (GPL).
 
 ## 2. Code
 
@@ -103,8 +112,7 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
   - [ ] Contact email.
   - [ ] Feedback and collaboration.
   - [ ] The EULA statement, copied word for word from the process page.
-  - [ ] Permissions: what `httpAccess` sends, to which address and why; `chatAccess`
-        if kept; and how they work together.
+  - [ ] Permissions: what `httpAccess` sends, to which address and why.
   - [ ] Data protection: what is sent (position, levels, XP, quests, achievements,
         item reports), where to, security (HTTPS where used, a bearer key per
         player, revocable in the picker), who can read it, and a link to the

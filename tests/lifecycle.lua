@@ -57,9 +57,9 @@ ui={Interfaces={GetComponent=function() return root end},TextContentVisibilityMo
 id={Component={TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP=1},Quest={}}
 prettyui={Window={new=function(p,o) return host(p,o,true) end},SimpleView={new=function(p,o) return host(p,o,false) end},
   SimpleButton={new=function(p,text,action,o) local b=component(p,o); b.action=action; return b end}}
-PluginPermissions={httpAccess=1,chatAccess=2}
+PluginPermissions={httpAccess=1}
 local chat={}; Chat={AddMessage=function(m) chat[#chat+1]=m end}
-Plugin={urls={home={},scratch={}},HasPermission=function(p) if p==2 then return true end; assert(p==1); return allowed end}
+Plugin={urls={home={},scratch={}},HasPermission=function(p) assert(p==1); return allowed end}
 log=function(line) logs[#logs+1]=line end
 GameState={GAME=30}
 Player={IsAvailable=function() return true end,GetEntity=function() return {displayName=who,isValid=valid,coordGrid={mapSquareX=53,mapSquareZ=45,level=0}} end,
@@ -151,12 +151,8 @@ assert(not rollBanner(),'the roll banner waits for the locked one')
 emit('Draw',{timeDeltaSecs=2}); emit('ServerLogic'); assert(banners()==1 and not banner.destroyed)
 emit('Draw',{timeDeltaSecs=4}); emit('ServerLogic'); assert(banner.destroyed and banners()==1) -- no repeat while still inside
 local roll=rollBanner(); assert(roll and not roll.destroyed and roll.children[1].content:find('Draynor or chunk 12594'))
--- Both went to the chatbox straight away, once each.
-assert(#chat==2 and chat[1]:find('Nardah') and chat[2]:find('Draynor or chunk 12594'),table.concat(chat,' | '))
--- Granting chat posts a confirmation line; the diagnostics show the live permission and the change.
-emit('OptionalPermissionChanged',{permissionName='chatAccess',enabled=true})
-assert(#chat==3 and chat[3]=='Chunk Picker: chat messages are on.')
-emit('OptionalPermissionChanged',{permissionName='chatAccess',enabled=false}); assert(#chat==3)
+-- Banners only: nothing goes to the chatbox.
+assert(#chat==0,table.concat(chat,' | '))
 emit('Draw',{timeDeltaSecs=6}); emit('ServerLogic'); assert(roll.destroyed and rollBanner()==roll) -- once per waiting roll
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',false); assert(values.shadeChunks==false and not shape.visible)
 settings.checkboxes.options.onChange(nil,nil,'shadeChunks',true); assert(shape.visible)

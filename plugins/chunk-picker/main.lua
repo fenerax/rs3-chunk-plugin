@@ -119,8 +119,7 @@ local function diagnosticLines()
     "Tasks window: "..tasksWindow:describe(),
     "Locked warning: "..warning:describe(),
     "Key character: "..identity:describe(),
-    "Permissions now: http="..tostring(permission("httpAccess")).." chat="..tostring(permission("chatAccess"))
-      .."; chat enum="..tostring(pcall(function() assert(PluginPermissions.chatAccess~=nil) end))
+    "Permissions now: http="..tostring(permission("httpAccess"))
       .."; changes="..(#permissionEvents==0 and "none" or table.concat(permissionEvents,",")),
     "Settings page: "..(#settings.failures==0 and "built" or table.concat(settings.failures,"; ")),
     "Settings window: "..(not settingsWindow.window and (settingsWindow.error and "failed" or "closed")
@@ -172,8 +171,6 @@ subscribe("ContentLayerReady",function(e) diagnostics:mount(e.component) end)
 subscribe("OptionalPermissionChanged",function(e)
   if #permissionEvents<8 then permissionEvents[#permissionEvents+1]=tostring(e.permissionName).."="..tostring(e.enabled) end
   if e.permissionName=="httpAccess" then changed(); render() end
-  -- Granting chat posts one line straight away, so it's clear it worked.
-  if e.permissionName=="chatAccess" and e.enabled then warning:post("chat messages are on.") end
 end)
 subscribe("GameStateChanged",function(e)
   local state=e.newState

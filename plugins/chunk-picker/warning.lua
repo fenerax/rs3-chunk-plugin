@@ -8,19 +8,10 @@ function M.new(store)
     if self.window then pcall(function() self.window:Destroy() end) end
     self.window=nil; self.shownAt=nil
   end
-  -- Also into your own chatbox (local only, never sent to other players), so a missed banner stays readable.
-  function self:post(message)
-    if not store:get("warnChat","Bool",true) then return end
-    -- Chat needs the optional chatAccess permission (console: ppe chunk-picker chatAccess).
-    local allowed=pcall(function() assert(Plugin.HasPermission(PluginPermissions.chatAccess)) end)
-    if not allowed then self.chatState="permission off"; return end
-    local ok=pcall(function() Chat.AddMessage("Chunk Picker: "..message) end)
-    if ok then self.posted=(self.posted or 0)+1; self.chatState=nil else self.chatState="AddMessage failed" end
-  end
   function self:show(chunk,name,now,rollable)
     local message="You walked into "..(name and (name.." (chunk "..chunk..")") or ("chunk "..chunk))
       ..(rollable and ", which is locked. It can be picked next." or ", which is locked.")
-    self:post(message); self:notice("Locked chunk",message,0xFF7878FF,now)
+    self:notice("Locked chunk",message,0xFF7878FF,now)
   end
   -- One banner at a time; a second waits its turn instead of replacing the first.
   function self:notice(title,message,colour,now)
@@ -77,12 +68,12 @@ function M.new(store)
     self.rollKey=key
     if store:get("warnRoll","Bool",true) then
       local message="Roll waiting: choose "..table.concat(names," or ").." in the picker."
-      self:post(message); self:notice("Roll waiting",message,0xE5C66BFF,now)
+      self:notice("Roll waiting",message,0xE5C66BFF,now)
     end
   end
   function self:reset() self.warned=nil; self.rollKey=nil; self.queue={}; self:destroy() end
   function self:describe()
-    return (self.error or "ready").."; shown="..self.count.."; chat="..(self.posted or 0)..(self.chatState and (" ("..self.chatState..")") or "")..(self.window and "; on screen" or "")
+    return (self.error or "ready").."; shown="..self.count..(self.window and "; on screen" or "")
   end
   return self
 end
