@@ -8,8 +8,10 @@ This notice covers the RS3 Chunk Picker plugin for RuneScape 3 and the hosted
 Chunk Picker server it reports to. It explains what the plugin sends, where it
 goes, who can see it and how to have it removed.
 
-The plugin is a fan project by fenerax. It is not made, endorsed or supported
-by Jagex. Contact: **<contact email>**.
+The plugin and the hosted picker are run by fenerax, who decides how this data
+is used (the "data controller"). Contact: **<contact email>**.
+
+The plugin is a fan project. It is not made, endorsed or supported by Jagex.
 
 ## When anything is sent
 
@@ -20,6 +22,10 @@ Nothing leaves your PC until you do all of these:
 3. paste that key into the plugin's Settings and click **Save**.
 
 Without a key the plugin only shows your chunk number and sends nothing.
+
+You don't have to send anything: no law or contract requires it. Without a key,
+or with a report type switched off, the plugin still runs; the picker just
+won't see that part of your progress.
 
 ## What the plugin sends
 
@@ -61,6 +67,18 @@ The plugin keeps these in the game client's plugin storage:
 The game does not say whether this storage is encrypted. **Forget key** in
 Settings deletes the selected server's key.
 
+## Why it is used, and on what basis
+
+The data is used for one purpose: running your chunk-locked game in the picker.
+That means showing your chunk and its status in game, and suggesting progress
+(levels, quests, achievements, item goals) for you to review.
+
+The legal basis is your **consent** (UK GDPR Article 6(1)(a)). You give it by
+saving a key and leaving each report type switched on. You can withdraw it at
+any time, as easily as you gave it: switch a report type off, click **Forget
+key**, or revoke the key in the picker. Withdrawing stops new reports; it
+doesn't undo what was sent before, but you can ask for that to be deleted.
+
 ## What the picker does with it
 
 The picker uses reports to show your chunk in game and to suggest progress for
@@ -90,13 +108,21 @@ kept for <backup retention>.
   sees the progress you applied.
 - The picker's administrator (fenerax), who runs the server.
 
-Nobody else. The data is not sold, shared with advertisers or used for
-anything other than running your picker.
+The server runs on **<hosting provider>**, which stores it for us as a data
+processor and may not use it for anything else. Nobody else receives it. The
+data is not sold, shared with advertisers or used for anything other than
+running your picker.
+
+No decision with legal or similarly significant effects is made about you by
+automated means. The automatic ticks above only change your picker's task
+list, and you can undo them.
 
 ## Where it is stored and how it is protected
 
 - The server is a virtual private server in **Canada**, run by
-  **<hosting provider>**. Canada has a UK adequacy decision.
+  **<hosting provider>**. The data is not sent anywhere else. If you are in the
+  UK or EU, sending it to Canada is a transfer to a country that the UK and
+  EU recognise as giving adequate protection (an "adequacy decision").
 - Reports travel over HTTPS.
 - Each player has their own plugin key. The key only works for the plugin's
   three routes, can't sign in to the picker, and you can revoke it at any time
@@ -110,15 +136,27 @@ anything other than running your picker.
 - Turn off levels, quests, achievements or items in the plugin's Settings.
 - Stop all sending: click **Forget key**, revoke the key in the picker, or
   remove the plugin's web access.
-- Ask for a copy of your data, a correction or deletion by writing to
-  **<contact email>**. You will get a reply within one month.
 
-If you are in the UK, you can also complain to the Information Commissioner's
-Office (ico.org.uk).
+You have the right to:
+
+- get a copy of your data (access), including in a reusable format
+  (portability);
+- have it corrected (rectification);
+- have it deleted (erasure);
+- ask us to stop using it while a concern is checked (restriction);
+- withdraw your consent at any time, as described above.
+
+To use any of these, write to **<contact email>**. You will get a reply within
+one month, and it costs nothing.
+
+If you are unhappy with how your data is handled, you can complain to the UK
+Information Commissioner's Office: https://ico.org.uk/make-a-complaint/ or
+0303 123 1113. If you live in the EU, you can complain to your local data
+protection authority instead.
 
 ## Changes
 
 Changes to this notice are recorded in this repository's history. The plugin's
 listing links to the current version.
 
-Last updated: <date>.
+Last updated: 27 October 2026.

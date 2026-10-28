@@ -78,6 +78,10 @@ Your partner's chunk is shown only when your partner uses the plugin with the
 same picker; it is what their own plugin reported, not something read from the
 game.
 
+Sending is based on your consent: nothing goes out until you save a key, each
+report type can be switched off, and you can withdraw at any time with Forget
+key or by revoking the key in the picker.
+
 To ask for a copy of your data, a correction or deletion, email the address
 above.
 
