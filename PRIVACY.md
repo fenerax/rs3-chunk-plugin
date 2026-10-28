@@ -1,9 +1,5 @@
 # Privacy notice: RS3 Chunk Picker plugin
 
-> **Draft.** The parts in angle brackets are filled in once the hosted picker
-> has its server and address. Until then the plugin only talks to a picker on
-> your own PC.
-
 This notice covers the RS3 Chunk Picker plugin for RuneScape 3 and the hosted
 Chunk Picker server it reports to. It explains what the plugin sends, where it
 goes, who can see it and how to have it removed.
@@ -29,8 +25,8 @@ won't see that part of your progress.
 
 ## What the plugin sends
 
-Each report goes to one address only: **<picker address>**. The game client
-refuses any other address. A report can contain:
+Each report goes to one address only: **https://chunkpicker.ca**. The game
+client refuses any other address. A report can contain:
 
 | Data | Details | Can you turn it off? |
 | --- | --- | --- |
@@ -43,7 +39,8 @@ refuses any other address. A report can contain:
 | Diagnostics | Up to 80 short lines about what the plugin could read, for example "bank unreadable". They say which settings exist, never their values. | No. |
 
 It also sends your plugin key in a request header, so the picker knows which of
-its players the report belongs to.
+its players the report belongs to. Like any web request, each one also shows
+the server your IP address (see connection logs below).
 
 The plugin never sends your account name, character name, email address or
 world number. It does not read chat or other players. The plugin also asks the
@@ -95,10 +92,13 @@ you can undo: unique achievement matches, and gear goals for items you own.
 | Items, coins and bank (live worlds) | A file next to your picker save: items seen, when, the bank's coin total and when it was last seen | For as long as your picker exists, or until you ask for deletion. |
 | Items (beta worlds) | Server memory only | Until the server restarts. |
 | Plugin key | Only a SHA-256 hash of it | Until you revoke the key. |
-| Connection logs | <hosting details> | <log retention> |
+| Connection logs | The web server's log: IP address, time, request method, status code and response time. No page addresses, keys or other request details. | 7 days. |
 
-Your picker save is backed up with the rest of the server's data. Backups are
-kept for <backup retention>.
+Your picker save is backed up once a day with the rest of the server's data.
+The server keeps the last 30 daily backups, and an encrypted copy of each is
+kept for the same 30 days on the administrator's PC, also in Canada. The
+hosting provider keeps one more backup of the whole server, replaced every day.
+Positions, diagnostics and beta-world items are never in backups.
 
 ## Who can see it
 
@@ -108,7 +108,7 @@ kept for <backup retention>.
   sees the progress you applied.
 - The picker's administrator (fenerax), who runs the server.
 
-The server runs on **<hosting provider>**, which stores it for us as a data
+The server runs on **OVHcloud**, which stores it for us as a data
 processor and may not use it for anything else. Nobody else receives it. The
 data is not sold, shared with advertisers or used for anything other than
 running your picker.
@@ -119,8 +119,8 @@ list, and you can undo them.
 
 ## Where it is stored and how it is protected
 
-- The server is a virtual private server in **Canada**, run by
-  **<hosting provider>**. The data is not sent anywhere else. If you are in the
+- The server is a virtual private server in **Canada**, in OVHcloud's
+  Beauharnois, Quebec data centre. The data is not sent anywhere else. If you are in the
   UK or EU, sending it to Canada is a transfer to a country that the UK and
   EU recognise as giving adequate protection (an "adequacy decision").
 - Reports travel over HTTPS.
@@ -129,7 +129,9 @@ list, and you can undo them.
   in **More → Game plugin**. The server stores only a hash of it.
 - Reports are size- and rate-limited, and anything that doesn't match the
   expected format is rejected.
-- Only the administrator has access to the server.
+- Only the administrator can log in to the server, with key-based login only.
+  The picker's admin pages are reachable only over a private network, and the
+  connection log is readable only by the administrator.
 
 ## Your choices and rights
 
