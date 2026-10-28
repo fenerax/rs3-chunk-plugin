@@ -102,8 +102,10 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 ## 3. Final test on beta
 
 - [x] Build the exact zip: `main.lua` and `plugin.json` at the top level, named
-      `chunk-picker-100.zip`, with no tests or `chunk-picker-test`. Built 2026-10-28
-      from 42b8f4e: 19 files, SHA-256 30F491BF…48334598, `urls` production only.
+      `chunk-picker-100.zip`, with no tests or `chunk-picker-test`. Rebuilt 2026-10-28
+      from a2994bd after the beta-default fix (#23): 19 files, SHA-256
+      638A6B07…, `urls` production only. Retested: no server line, beta tick
+      off by default, reports still sync.
 - [x] Clean install of that zip on the beta world with PrettyUI installed from the
       Hub. Run every feature in the README: panel, shading, warning, Tasks
       window, reports, key per server, character binding. Passed 2026-10-28,
