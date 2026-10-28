@@ -48,7 +48,10 @@ local function host(parent,opts,isWindow)
   end
   function h:AddTextField(o) local c=component(self,o); c.placeholder=o.placeholder; return c end
   function h:AddComboBox(o) local b=component(self,o); b.options=o; return b end
-  function h:AddCheckboxButton(choices,o) self.checkboxes={choices=choices,options=o} end
+  function h:AddCheckboxButton(choices,o)
+    self.checkboxes={choices=choices,options=o}
+    self.groups=self.groups or {}; self.groups[#self.groups+1]=self.checkboxes
+  end
   if isWindow then windows[#windows+1]=h else views[#views+1]=h end
   return h
 end
@@ -122,7 +125,7 @@ requests[1].callback({responseCode=200,data='{"state":"unknown"}'})
 for i=1,100 do emit('Draw',{timeDeltaSecs=0.02}) end
 emit('ServerLogic'); emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic'); assert(#requests==2)
 local req=requests[2]; assert(req.path=='/api/plugin/v1/report')
-local body=require('json').decode(req.body); assert(body.position.x==53 and body.world.beta)
+local body=require('json').decode(req.body); assert(body.position.x==53 and body.world.beta==false) -- live unless the player ticks beta
 assert(body.skills.ATTACK and body.quests.finished[1]=='Mock quest')
 assert(#body.diagnostics>10 and #body.diagnostics<=80)
 for _,line in ipairs(body.diagnostics) do assert(#line<=160 and not line:find('synthetic')) end
@@ -553,6 +556,12 @@ var=nil; invs[95],invs[623]=nil,nil
 config.Inv,Inventory=nil,nil
 -- Closing stays closed; logging out and back in keeps it closed.
 tw.options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tw.destroyed and values.tasksWindow==false)
+-- A Hub build lists one server: no server buttons, and the beta tick starts off.
+Plugin.urls={production={}}; values.server=nil
+emit('SettingsLayerReady',{component=root}); local hub=views[#views]
+for _,c in ipairs(hub.children) do assert(c.content~='production' and not (c.content or ''):find('^Server:'),c.content) end
+local betaBox; for _,g in ipairs(hub.groups) do for _,c in ipairs(g.choices) do if c.value=='beta' then betaBox=c end end end
+assert(betaBox and betaBox.selected==false and betaBox.text:find('beta world'))
 PluginShutdown(); assert(next(handlers)==nil); for _,w in ipairs(windows) do assert(w.destroyed,w.title) end; assert(next(shapes)==nil)
 assert(views[#views].destroyed); PluginShutdown()
 for _,line in ipairs(logs) do assert(not line:find('synthetic')) end

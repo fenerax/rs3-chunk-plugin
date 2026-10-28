@@ -31,7 +31,7 @@ client refuses any other address. A report can contain:
 | Data | Details | Can you turn it off? |
 | --- | --- | --- |
 | Position | Map square (x, z) and floor. This is the 64×64-tile chunk you are in, not your exact tile. | No. It goes with every report. |
-| World type | Whether you are on a beta world. The world number is never sent. | No. |
+| World type | Whether you ticked "I'm playing on the beta world" in Settings. The world number is never sent. | No. |
 | Levels | Level and XP for each skill. | Yes, in Settings. |
 | Quests | Names of quests you have finished or started. | Yes. |
 | Achievements | Completed achievements, including Achievement Diaries: id, name and category. | Yes. Only sent if the picker says it accepts them. |
@@ -161,4 +161,4 @@ protection authority instead.
 Changes to this notice are recorded in this repository's history. The plugin's
 listing links to the current version.
 
-Last updated: 27 October 2026.
+Last updated: 28 October 2026.

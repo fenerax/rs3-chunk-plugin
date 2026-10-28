@@ -176,6 +176,8 @@ function M.new(store, callbacks, options)
         page:AddText("No servers in the manifest; see Diagnostics")
         return
       end
+      -- A Hub build has one server, so there is nothing to choose.
+      if #names == 1 then return end
       local label = page:AddText("Server: " .. store:server())
       -- Plain buttons, not a combo box: the combo box opened empty in the beta settings layer.
       for i, name in ipairs(names) do
@@ -278,8 +280,8 @@ function M.new(store, callbacks, options)
         {"sendAchievements", "Send my achievements"},
         {"sendItems", "Send my items and bank"},
         {"showPanel", "Show panel"},
-        {"beta", "Beta world"},
       }, true)
+      checkboxes(page, {{"beta", "I'm playing on the beta world (the picker ticks nothing)"}}, false)
       page:AddText("The picker may tick tasks for achievements you completed and gear you own; other progress waits for review there. Nothing here unlocks a chunk.")
     end)
   end
