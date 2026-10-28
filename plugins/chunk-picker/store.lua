@@ -50,6 +50,21 @@ function M.new(db)
     pcall(function() self.db:Delete(ownerName) end)
     return true
   end
+  -- The chosen server, a name from plugin.json's urls. Before any choice it is scratch,
+  -- for beta testing; a Hub build lists only production, so it falls back to that.
+  function self:server()
+    local saved = self:get("server", "String", nil)
+    if saved then return saved end
+    local names = {}
+    pcall(function()
+      for name in pairs(Plugin.urls) do names[#names + 1] = tostring(name) end
+    end)
+    table.sort(names)
+    for _, name in ipairs(names) do
+      if name == "scratch" then return name end
+    end
+    return names[1] or "scratch"
+  end
   function self:present(key)
     local ok, exists = pcall(function() return self.db:CheckExists(key) end)
     return ok and exists and "set" or "not set"

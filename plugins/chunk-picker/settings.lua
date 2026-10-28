@@ -176,16 +176,16 @@ function M.new(store, callbacks, options)
         page:AddText("No servers in the manifest; see Diagnostics")
         return
       end
-      local label = page:AddText("Server: " .. store:get("server", "String", "scratch"))
+      local label = page:AddText("Server: " .. store:server())
       -- Plain buttons, not a combo box: the combo box opened empty in the beta settings layer.
       for i, name in ipairs(names) do
         -- Each server has its own saved key; see identity.switch.
         page:AddSimpleButton(name, function()
-          local from = store:get("server", "String", "scratch")
+          local from = store:server()
           local failed = identity.switch(store, from, name)
           callbacks.connectionChanged()
           local saved = store:get("personalKey", "String", "")
-          label.content = "Server: " .. store:get("server", "String", "scratch")
+          label.content = "Server: " .. store:server()
           if self.keyStatus then self.keyStatus.content = keyLine(saved) end
           if failed then
             self:message(failed)
@@ -241,7 +241,7 @@ function M.new(store, callbacks, options)
       page:AddSimpleButton("Forget key", function()
         -- Only this server's key; a parked copy of it would come back on the next switch.
         local forgotten = store:forget()
-          and store:forget(identity.parked(store:get("server", "String", "scratch")))
+          and store:forget(identity.parked(store:server()))
         if key then key:SetText("", false) end
         callbacks.connectionChanged()
         self:message(forgotten and "Key forgotten" or "Couldn't remove the key; try again")

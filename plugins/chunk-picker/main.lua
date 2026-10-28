@@ -67,7 +67,7 @@ local function connection()
   if key == "" then return nil, nil, "Open plugin Settings, paste your personal key and Save" end
   local paused = identity:check(key)
   if paused then return nil, nil, paused end
-  local ok, handle = pcall(function() return Plugin.urls[store:get("server", "String", "scratch")] end)
+  local ok, handle = pcall(function() return Plugin.urls[store:server()] end)
   if not ok or not handle then return nil, nil, "Choose a manifest server in Settings" end
   return handle, key
 end
@@ -183,7 +183,7 @@ local function diagnosticLines()
   end
   -- Whether each server has a key of its own, never the key.
   pcall(function()
-    local active, names = store:get("server", "String", "scratch"), {}
+    local active, names = store:server(), {}
     for name in pairs(Plugin.urls) do names[#names + 1] = tostring(name) end
     table.sort(names)
     for i, name in ipairs(names) do

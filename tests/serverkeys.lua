@@ -10,7 +10,7 @@ Player = {GetEntity = function() return who and {displayName = who} or nil end}
 local identity = require('identity')
 local store = require('store').new(PersistentDB)
 local check = identity.new(store)
-local function select(to) return identity.switch(store, store:get('server', 'String', 'scratch'), to) end
+local function select(to) return identity.switch(store, store:server(), to) end
 local function key() return store:get('personalKey', 'String', '') end
 
 -- Upgrade: a key saved before servers had their own belongs to the server selected now,
@@ -64,4 +64,16 @@ assert(identity.save(store, 'homekey') == nil and check:check(key()) == nil)
 -- A parked key whose owner went missing waits for Save rather than going to whoever is on.
 values.personalKey_scratch, values.keyOwner_scratch = 'oldkey', nil
 assert(select('scratch') == nil and key() == 'oldkey' and check:check(key()) == identity.UNFINISHED)
+
+-- Before any choice: scratch while the manifest lists it (beta), else its first server, so a
+-- Hub build with only production connects there.
+values.server = nil
+assert(store:server() == 'scratch', 'no manifest')
+Plugin = {urls = {home = {}, production = {}, scratch = {}}}
+assert(store:server() == 'scratch')
+Plugin = {urls = {production = {}}}
+assert(store:server() == 'production')
+values.server = 'home'
+assert(store:server() == 'home', 'a saved choice wins')
+Plugin = nil
 print('server key tests passed')

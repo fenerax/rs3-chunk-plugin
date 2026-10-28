@@ -74,8 +74,9 @@ Reload with `prl chunk-picker`; turn it off with `poff chunk-picker`. Without a
 key, the panel still shows your chunk (Lumbridge is **12850**, Nardah **13613**).
 
 The plugin can only reach the servers listed under `urls` in
-`plugins/chunk-picker/plugin.json`, and those are loopback addresses. To use a
-picker on another port, add it there.
+`plugins/chunk-picker/plugin.json`: `production` and two loopback addresses for
+testing. To use a picker on another port, add it there. The Plugin Hub version
+lists only `production`.
 
 ## Privacy
 
@@ -166,8 +167,8 @@ or the bank is seen again ten minutes after the time the picker holds.
 buttons run Jagex's dev cheat commands (teleport to a chunk, step one chunk
 over, give an item, open the bank), a replay tool that posts recorded reports to
 a picker without the game, and `tools/build-release.mjs`, which builds the
-Plugin Hub zip and refuses probe, test and dev files, cheat commands and
-loopback server URLs. See [dev/README.md](dev/README.md), including the warning
+Plugin Hub zip. It refuses probe, test and dev files and cheat commands, and
+leaves loopback server URLs out of the zipped manifest. See [dev/README.md](dev/README.md), including the warning
 that Jagex logs cheat commands. `node --test tests/build-release.test.mjs
 tests/replay.test.mjs` tests the two Node tools.
 
