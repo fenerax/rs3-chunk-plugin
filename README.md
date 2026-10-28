@@ -78,6 +78,9 @@ picker on another port, add it there.
 
 ## Privacy
 
+The full notice, including what the hosted picker keeps and how to have it
+deleted, is in [PRIVACY.md](PRIVACY.md).
+
 - The plugin sends only your position, levels, XP, quest names, your
   completed achievements (id, name and category), your worn, backpack and coin
   pouch items (id, count, slot and name), your tool belt tools and your bank
