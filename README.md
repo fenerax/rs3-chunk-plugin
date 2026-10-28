@@ -79,7 +79,8 @@ Not available yet: this section applies once Jagex approves the plugin.
 6. In the picker, open **More → Game plugin** and create a plugin key. In the
    game, open **Chunk Picker** in the Plugin Hub's Settings, choose the server
    (**production** is the shared picker at `https://chunkpicker.ca`; **home** is a
-   picker on `127.0.0.1:8789`), paste the key and click **Save**,
+   picker on `127.0.0.1:8789`), tick **I'm playing on the beta world** so the
+   picker ticks nothing from your beta character, paste the key and click **Save**,
    then **Test connection**. Each server keeps its own key, so choosing another
    server brings back the key saved for it, or asks for one.
 

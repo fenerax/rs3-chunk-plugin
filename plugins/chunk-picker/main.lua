@@ -89,10 +89,15 @@ local function allowed(name)
   local ok, value = store:read(name, "Bool")
   return ok and value ~= false
 end
+-- The API can't tell a beta world from a live one, so the player says so in Settings. Off by
+-- default: Hub players are on live worlds, and testers tick it before playing on beta.
+local function onBeta()
+  return store:get("beta", "Bool", false)
+end
 local function world()
   -- The public API exposes no current-world number. ID 1 is our fixed companion channel;
   -- beta distinguishes imported/live character copies. No account/character identifier is sent.
-  return {id = 1, beta = store:get("beta", "Bool", true)}
+  return {id = 1, beta = onBeta()}
 end
 -- Sync now reads everything again and reports from the next game tick, without waiting for a
 -- move or the timers. A reading the picker already holds isn't sent twice. Presses count ten
@@ -159,7 +164,7 @@ local function diagnosticLines()
     "Drag position saved: " .. panel.positionSaved,
     "Server reached: " .. tostring(net.serverConnected),
     "Clock: " .. (net:epoch(now) and "available" or "awaiting HTTP Date"),
-    "World channel: id=1; beta=" .. tostring(store:get("beta", "Bool", true)),
+    "World channel: id=1; beta=" .. tostring(onBeta()),
     "Panel: " .. (panel.error or "ready") .. "; storage=" .. tostring(store.writeOK)
       .. "; resizable=" .. tostring(panel.resizable),
     "Payload: " .. (net.payloadWarning or "within 16 KB"),
