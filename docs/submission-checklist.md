@@ -110,27 +110,32 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 
 ## 4. mod.io listing
 
-- [ ] Create the listing early, hidden, to reserve the name.
+- [x] Create the listing early, hidden, to reserve the name. Done 2026-10-28:
+      https://mod.io/g/runescape/m/chunk-picker, Private, ID 6485729. The cover
+      image is a temporary placeholder.
 - [ ] Summary of 10 to 250 ASCII characters, a 16:9 logo of at least 512×288, and screenshots.
 - [ ] Homepage link to this repo.
-- [ ] Description sections, following the example page. Ready in
-      [listing.md](listing.md) (2026-10-28):
-  - [ ] Contact email.
-  - [ ] Feedback and collaboration.
-  - [ ] The EULA statement, copied word for word from the process page.
-  - [ ] Permissions: what `httpAccess` sends, to which address and why.
-  - [ ] Data protection: what is sent (position, levels, XP, quests, achievements,
+- [x] Description sections, following the example page. Written in
+      [listing.md](listing.md) and saved on the listing (2026-10-28):
+  - [x] Contact email.
+  - [x] Feedback and collaboration.
+  - [x] The EULA statement, copied word for word from the process page.
+  - [x] Permissions: what `httpAccess` sends, to which address and why.
+  - [x] Data protection: what is sent (position, levels, XP, quests, achievements,
         item reports), where to, security (HTTPS where used, a bearer key per
         player, revocable in the picker), who can read it, and a link to the
         privacy notice.
-  - [ ] Note that the partner chunk and roll come from the player's own picker, not
+  - [x] Note that the partner chunk and roll come from the player's own picker, not
         from the game. "Obtaining any information about other players" gets
         extra review.
 - [x] Privacy notice page: [PRIVACY.md](../PRIVACY.md), checked against the ICO's
       list of required privacy information; server details filled in 2026-10-28.
-- [ ] Tags, including the tag for each permission.
-- [ ] Add PrettyUI (6398181) as a mod.io dependency; it must match
-      `requiredDependencies`.
+- [ ] Tags, including the tag for each permission. Saved 2026-10-28: Interface,
+      Utility, Navigation, Stats and Analytics, Planning and Calculators, Content
+      helpers. The permission tag must be "httpAccess (optional)", to match
+      `optionalPermissions`; the listing has plain "httpAccess" ticked.
+- [x] Add PrettyUI (6398181) as a mod.io dependency; it must match
+      `requiredDependencies`. Saved 2026-10-28.
 - [ ] Platforms: tick what the upload form asks for. Staff said Windows, Mac and Linux
       (2026-10-05 and 10-08); the process page still shows an older table.
 
