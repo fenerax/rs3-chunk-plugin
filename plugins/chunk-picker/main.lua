@@ -151,7 +151,7 @@ settingsWindow = require("settings").new(store, settingsCallbacks, {windowed = t
 -- Shown on the content page, printed to the console at start, and sent to the picker.
 local function diagnosticLines()
   local lines = {
-    "Chunk Picker 0.1.0",
+    "Chunk Picker 1.0.0",
     "Stdlib: os=" .. type(os) .. " io=" .. type(io) .. " utf8=" .. type(utf8) .. " load=" .. type(load),
     "Quests: " .. progress.questMethod .. "; count=" .. progress.questCount,
     "Skills: " .. progress.skillCount .. "/29; quest vars mapped=" .. tostring(progress.varMapped),

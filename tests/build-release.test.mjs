@@ -57,6 +57,7 @@ test('a clean plugin zips with main.lua and plugin.json at the top', () => {
 test('versions must be digits and dots and match the manifest', () => {
   const dir = plugin({});
   for (const version of ['0.1.0-beta', 'v0.1.0', '', undefined, '0..1']) refused({ pluginDir: dir, version }, /digits and dots/);
+  refused({ pluginDir: plugin({ 'main.lua': 'local v = "Chunk Picker 0.0.9"\n' }) }, /main\.lua shows version 0\.0\.9, not 0\.1\.0/);
   refused({ pluginDir: dir, version: '0.2.0' }, /says version 0\.1\.0/);
   refused({ pluginDir: plugin({}, null) }, /plugin\.json is missing/);
 });

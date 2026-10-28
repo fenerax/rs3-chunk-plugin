@@ -76,9 +76,10 @@ Closing the dev window hides it until `prl chunk-picker-dev`.
   prints the key or the picker's address, refuses non-loopback pickers unless
   `--allow-remote`, and refuses live-world reports unless `--allow-live-world`.
   The fixture is synthetic and claims a beta world, so a picker ticks nothing.
-- `node tools/build-release.mjs <output dir outside the repo> --version 0.1.0`
-  builds the Plugin Hub zip (`chunk-picker-010.zip`). `--allow-local` builds a
-  beta zip even with loopback server URLs, with a warning.
+- `node tools/build-release.mjs <output dir outside the repo> --version 1.0.0`
+  builds the Plugin Hub zip (`chunk-picker-100.zip`), leaving loopback server
+  URLs out of its manifest. `--allow-local` keeps them, for a beta zip, with a
+  warning.
 
 Tests: `node tests/run.cjs` (Lua, including the dev tools' command strings) and
 `node --test tests/build-release.test.mjs tests/replay.test.mjs`.
