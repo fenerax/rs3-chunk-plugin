@@ -92,9 +92,11 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
       of state the game showed you.
 - [ ] Check the Tasks window against the reported PrettyUI bugs: resize leak with
       many components, leftover edge markers when hiding mid-drag, wheel scrolling.
-- [ ] Set `version` to `1.0.0`. Every upload needs a new version that matches
-      the manifest, plus a changelog against the last approved version.
-- [ ] Update the README "Status" section and the install steps for Hub users.
+- [x] Set `version` to `1.0.0` (2026-10-28; build-release also checks the version
+      `main.lua` shows). Every later upload needs a new version that matches the
+      manifest, plus a changelog against the last approved version.
+- [ ] Update the README "Status" section once approved. Hub install steps added
+      2026-10-28, marked "not available yet".
 
 ## 3. Final test on beta
 

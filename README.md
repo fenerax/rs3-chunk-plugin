@@ -44,6 +44,19 @@ RuneScape is a trademark of Jagex Ltd.
 - **Tool belt:** there is no tool belt container, so the plugin reads the
   game's per-tool variables (`TOOLBELT_*`).
 
+## Install from the Plugin Hub
+
+Not available yet: this section applies once Jagex approves the plugin.
+
+1. In RuneScape, open the Plugin Hub, find **Chunk Picker** and install it. It
+   needs **PrettyUI**; install that too if the Hub doesn't add it for you.
+2. Allow the plugin's web access when the game asks. It only reaches
+   `https://chunkpicker.ca`.
+3. On [chunkpicker.ca](https://chunkpicker.ca), open **More → Game plugin** and
+   create a plugin key.
+4. In the game, open **Chunk Picker** in the Plugin Hub's Settings, paste the key,
+   click **Save**, then **Test connection**.
+
 ## Install (beta world)
 
 1. Install **PrettyUI** from the Plugin Hub (plugin ID `6398181`). See the

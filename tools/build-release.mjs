@@ -1,6 +1,6 @@
 // Builds the Plugin Hub upload: plugins/chunk-picker zipped with main.lua and plugin.json at the
 // top, as chunk-picker-<version digits>.zip. It refuses anything that must never ship: a version
-// that isn't digits and dots or disagrees with the manifest, probe or test files, the beta dev
+// that isn't digits and dots or disagrees with the manifest or main.lua, probe or test files, the beta dev
 // tools and cheat commands. A Hub build leaves loopback server URLs out of the zipped manifest
 // and needs at least one HTTPS server; --allow-local keeps them, for a beta zip.
 // Run: node tools/build-release.mjs <output dir outside the repo> --version 0.1.0 [--allow-local]
@@ -41,6 +41,9 @@ export function build({ pluginDir = path.join(repo, 'plugins', 'chunk-picker'), 
   if (manifest.version !== version) throw new Refusal(`plugin.json says version ${manifest.version}, not ${version}`);
   const list = files(pluginDir);
   for (const required of ['main.lua', 'plugin.json']) if (!list.includes(required)) throw new Refusal(`${required} is missing`);
+  // Diagnostics name the version; it must match what the Hub shows.
+  const shown = readFileSync(path.join(pluginDir, 'main.lua'), 'utf8').match(/"Chunk Picker (\d+(?:\.\d+)*)"/);
+  if (shown && shown[1] !== version) throw new Refusal(`main.lua shows version ${shown[1]}, not ${version}`);
   for (const rel of list) {
     const parts = rel.toLowerCase().split('/'), name = parts.at(-1);
     if (/^probe.*\.lua$/.test(name)) throw new Refusal(`Probe file must not ship: ${rel}`);
