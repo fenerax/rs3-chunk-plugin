@@ -130,10 +130,9 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
         extra review.
 - [x] Privacy notice page: [PRIVACY.md](../PRIVACY.md), checked against the ICO's
       list of required privacy information; server details filled in 2026-10-28.
-- [ ] Tags, including the tag for each permission. Saved 2026-10-28: Interface,
+- [x] Tags, including the tag for each permission. Saved 2026-10-28: Interface,
       Utility, Navigation, Stats and Analytics, Planning and Calculators, Content
-      helpers. The permission tag must be "httpAccess (optional)", to match
-      `optionalPermissions`; the listing has plain "httpAccess" ticked.
+      helpers, and "httpAccess (optional)" to match `optionalPermissions`.
 - [x] Add PrettyUI (6398181) as a mod.io dependency; it must match
       `requiredDependencies`. Saved 2026-10-28.
 - [ ] Platforms: tick what the upload form asks for. Staff said Windows, Mac and Linux
