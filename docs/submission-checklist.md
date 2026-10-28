@@ -147,7 +147,8 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 - [x] Add PrettyUI (6398181) as a mod.io dependency; it must match
       `requiredDependencies`. Saved 2026-10-28.
 - [x] Platforms: tick what the upload form asks for. Windows, Mac and Linux ticked
-      2026-10-28; the process page also asks for Source, which wasn't ticked. Staff said Windows, Mac and Linux
+      2026-10-28; the process page also asks for Source, but the upload
+      form refuses the file with Source ticked. Staff said Windows, Mac and Linux
       (2026-10-05 and 10-08); the process page still shows an older table.
 
 ## 5. Submit and after
