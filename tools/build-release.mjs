@@ -1,7 +1,8 @@
 // Builds the Plugin Hub upload: plugins/chunk-picker zipped with main.lua and plugin.json at the
 // top, as chunk-picker-<version digits>.zip. It refuses anything that must never ship: a version
 // that isn't digits and dots or disagrees with the manifest, probe or test files, the beta dev
-// tools, cheat commands, and (unless --allow-local, for beta builds) loopback server URLs.
+// tools and cheat commands. A Hub build leaves loopback server URLs out of the zipped manifest
+// and needs at least one HTTPS server; --allow-local keeps them, for a beta zip.
 // Run: node tools/build-release.mjs <output dir outside the repo> --version 0.1.0 [--allow-local]
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -51,12 +52,24 @@ export function build({ pluginDir = path.join(repo, 'plugins', 'chunk-picker'), 
     const hit = text.match(CHEATS);
     if (hit) throw new Refusal(`Cheat command in ${rel}: ${hit[0]}`);
   }
-  const local = Object.entries(manifest.urls ?? {}).filter(([, url]) => LOCAL.test(String(url))).map(([name]) => name);
-  if (local.length && !allowLocal) throw new Refusal(`Loopback server URLs in plugin.json (${local.join(', ')}); a Hub build needs the hosted picker. --allow-local builds a beta zip anyway`);
-  if (local.length) warnings.push(`Beta build only: loopback server URLs (${local.join(', ')})`);
+  const urls = Object.entries(manifest.urls ?? {});
+  const local = urls.filter(([, url]) => LOCAL.test(String(url))).map(([name]) => name);
+  let manifestData = readFileSync(path.join(pluginDir, 'plugin.json'));
+  if (allowLocal) {
+    if (local.length) warnings.push(`Beta build only: loopback server URLs (${local.join(', ')})`);
+  } else {
+    const hosted = urls.filter(([name]) => !local.includes(name));
+    if (!hosted.length) throw new Refusal(`Only loopback server URLs in plugin.json (${local.join(', ')}); a Hub build needs the hosted picker. --allow-local builds a beta zip anyway`);
+    const plain = hosted.filter(([, url]) => !/^https:\/\//i.test(String(url))).map(([name]) => name);
+    if (plain.length) throw new Refusal(`Hub server URLs must use HTTPS: ${plain.join(', ')}`);
+    if (local.length) {
+      manifestData = Buffer.from(JSON.stringify({ ...manifest, urls: Object.fromEntries(hosted) }, null, 2) + '\n');
+      warnings.push(`Left loopback servers out of the Hub manifest: ${local.join(', ')}`);
+    }
+  }
   mkdirSync(out, { recursive: true });
   const zip = path.join(out, `chunk-picker-${version.replaceAll('.', '')}.zip`);
-  writeFileSync(zip, zipFiles(list.map(rel => ({ name: rel, data: readFileSync(path.join(pluginDir, rel)) }))));
+  writeFileSync(zip, zipFiles(list.map(rel => ({ name: rel, data: rel === 'plugin.json' ? manifestData : readFileSync(path.join(pluginDir, rel)) }))));
   return { zip, warnings, files: list };
 }
 

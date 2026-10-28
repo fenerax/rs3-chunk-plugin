@@ -77,11 +77,16 @@ test('cheat commands never ship, even in a comment', () => {
   build({ pluginDir: plugin({ 'net.lua': 'if a ~= b then return end\n' }), repoDir: path.join(work, 'repo'), outDir: out(), version: '0.1.0' });
 });
 
-test('loopback servers need --allow-local, and then warn', () => {
-  const dir = plugin({}, { ...hosted, urls: { scratch: 'http://127.0.0.1:8950', home: 'http://localhost:8789' } });
-  refused({ pluginDir: dir }, /Loopback server URLs in plugin\.json \(scratch, home\)/);
-  const result = build({ pluginDir: dir, repoDir: path.join(work, 'repo'), outDir: out(), version: '0.1.0', allowLocal: true });
-  assert.match(result.warnings[0], /Beta build only/);
+test('a Hub build leaves loopback servers out; --allow-local keeps them and warns', () => {
+  const onlyLocal = plugin({}, { ...hosted, urls: { scratch: 'http://127.0.0.1:8950', home: 'http://localhost:8789' } });
+  refused({ pluginDir: onlyLocal }, /Only loopback server URLs in plugin\.json \(scratch, home\)/);
+  const beta = build({ pluginDir: onlyLocal, repoDir: path.join(work, 'repo'), outDir: out(), version: '0.1.0', allowLocal: true });
+  assert.match(beta.warnings[0], /Beta build only/);
+  const mixed = plugin({}, { ...hosted, urls: { scratch: 'http://127.0.0.1:8950', production: 'https://picker.example.com' } });
+  const hub = build({ pluginDir: mixed, repoDir: path.join(work, 'repo'), outDir: out(), version: '0.1.0' });
+  assert.deepEqual(JSON.parse(unzip(hub.zip)['plugin.json']).urls, { production: 'https://picker.example.com' });
+  assert.match(hub.warnings[0], /Left loopback servers out of the Hub manifest: scratch/);
+  refused({ pluginDir: plugin({}, { ...hosted, urls: { production: 'http://picker.example.com' } }) }, /must use HTTPS: production/);
 });
 
 test('the zip goes outside the repo', () => {
@@ -90,12 +95,12 @@ test('the zip goes outside the repo', () => {
   assert.throws(() => build({ pluginDir: plugin({}), repoDir, outDir: repoDir, version: '0.1.0' }), /outside the repo/);
 });
 
-test('the real plugin builds for beta, and a Hub build waits for the hosted picker', () => {
+test('the real plugin builds for beta, and for the Hub with only the hosted picker', () => {
   const version = JSON.parse(readFileSync(new URL('../plugins/chunk-picker/plugin.json', import.meta.url))).version;
   const result = build({ outDir: out(), version, allowLocal: true });
   const entries = unzip(result.zip);
   assert.ok('main.lua' in entries && 'plugin.json' in entries);
   assert.ok(result.warnings.some(w => /Beta build only/.test(w)), result.warnings.join('; '));
-  // Today's manifest lists only loopback servers; the hosted picker's address replaces them before submission.
-  assert.throws(() => build({ outDir: out(), version }), /Loopback server URLs/);
+  const hub = build({ outDir: out(), version });
+  assert.deepEqual(JSON.parse(unzip(hub.zip)['plugin.json']).urls, { production: 'https://chunkpicker.ca' });
 });

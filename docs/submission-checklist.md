@@ -42,7 +42,7 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
       Loopback calls work on beta, but nobody has seen one pass review yet.
       Character Relay, a skills-to-local-listener plugin, is waiting for Jagex's
       answer (Discord, 2026-10-24).
-      Blocked on the VPS and its domain: the address goes in `urls` before submission.
+      Done 2026-10-28: `production` is `https://chunkpicker.ca` (OVHcloud, Beauharnois).
 - [x] **Data protection case.** Decided 2026-10-27: case 2. Case 1 means data never
       leaves the player's own PC, and reports go to the hosted picker. A host in
       Canada is case 2: list the endpoints and security measures and
@@ -69,9 +69,10 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 
 ## 2. Code
 
-- [ ] Remove the beta-only pieces. `probe.lua` is gone (2026-10-27). The `scratch`
-      and `home` loopback URLs stay for beta testing until the hosted picker's
-      address replaces them; `tools/build-release.mjs` refuses a Hub build until then.
+- [x] Remove the beta-only pieces. `probe.lua` is gone (2026-10-27). The `scratch`
+      and `home` loopback URLs stay in the repo for beta testing;
+      `tools/build-release.mjs` leaves them out of a Hub zip, which lists only
+      `production`, and the plugin then connects there by default (2026-10-28).
 - [ ] Readability pass. Split dense one-line statements, comment `json.lua`,
       `location.lua`, `progress.lua`, `diagnostics.lua` and `sync.lua`, and cut
       anything unused. Reviewers reject code that is "unnecessarily difficult to
@@ -110,8 +111,8 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 - [ ] Create the listing early, hidden, to reserve the name.
 - [ ] Summary of 10 to 250 ASCII characters, a 16:9 logo of at least 512×288, and screenshots.
 - [ ] Homepage link to this repo.
-- [ ] Description sections, following the example page. Drafted in
-      [listing.md](listing.md); fill in the email and server address:
+- [ ] Description sections, following the example page. Ready in
+      [listing.md](listing.md) (2026-10-28):
   - [ ] Contact email.
   - [ ] Feedback and collaboration.
   - [ ] The EULA statement, copied word for word from the process page.
@@ -123,9 +124,8 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
   - [ ] Note that the partner chunk and roll come from the player's own picker, not
         from the game. "Obtaining any information about other players" gets
         extra review.
-- [ ] Privacy notice page (Jagex points to the ICO generator). Drafted as
-      [PRIVACY.md](../PRIVACY.md); fill in the server, hosting provider, log and
-      backup retention once the VPS exists.
+- [x] Privacy notice page: [PRIVACY.md](../PRIVACY.md), checked against the ICO's
+      list of required privacy information; server details filled in 2026-10-28.
 - [ ] Tags, including the tag for each permission.
 - [ ] Add PrettyUI (6398181) as a mod.io dependency; it must match
       `requiredDependencies`.

@@ -1,7 +1,7 @@
 # mod.io listing text (draft)
 
 The description to paste into the Plugin Hub listing, following Jagex's example
-description page. Fill in the angle-bracket parts once the hosted picker exists. The EULA paragraph is copied word for word from Jagex's
+description page. The EULA paragraph is copied word for word from Jagex's
 submission process page; don't edit it.
 
 Summary (10 to 250 ASCII characters):
@@ -46,7 +46,7 @@ Plugin is at all times subject to the Jagex EULA.
 ## Permissions
 
 **HttpAccess.** This plugin requests the HttpAccess permission for
-<picker address>. It sends your current chunk (map square and floor), and, if
+https://chunkpicker.ca. It sends your current chunk (map square and floor), and, if
 you turn them on, your skill levels and XP, quest names, completed achievements
 and items (worn, backpack, coin pouch, tool belt and bank) to your Chunk Picker,
 so the picker can show your chunk and suggest progress. It reads back your
@@ -56,7 +56,8 @@ Settings.
 
 ## Data protection
 
-This plugin sends data to a server in Canada, which has a UK adequacy decision.
+This plugin sends data to https://chunkpicker.ca, a server in Canada (OVHcloud,
+Beauharnois, Quebec). Canada has a UK adequacy decision.
 The privacy notice is at
 https://github.com/fenerax/rs3-chunk-plugin/blob/main/PRIVACY.md.
 
