@@ -9,7 +9,7 @@ Chunk Picker server it reports to. It explains what the plugin sends, where it
 goes, who can see it and how to have it removed.
 
 The plugin and the hosted picker are run by fenerax, who decides how this data
-is used (the "data controller"). Contact: **<contact email>**.
+is used (the "data controller"). Contact: **chunkpickerplugin@gmail.com**.
 
 The plugin is a fan project. It is not made, endorsed or supported by Jagex.
 
@@ -146,7 +146,7 @@ You have the right to:
 - ask us to stop using it while a concern is checked (restriction);
 - withdraw your consent at any time, as described above.
 
-To use any of these, write to **<contact email>**. You will get a reply within
+To use any of these, write to **chunkpickerplugin@gmail.com**. You will get a reply within
 one month, and it costs nothing.
 
 If you are unhappy with how your data is handled, you can complain to the UK

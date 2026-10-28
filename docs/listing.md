@@ -1,8 +1,7 @@
 # mod.io listing text (draft)
 
 The description to paste into the Plugin Hub listing, following Jagex's example
-description page. Fill in the angle-bracket parts once the hosted picker and the
-plugin mailbox exist. The EULA paragraph is copied word for word from Jagex's
+description page. Fill in the angle-bracket parts once the hosted picker exists. The EULA paragraph is copied word for word from Jagex's
 submission process page; don't edit it.
 
 Summary (10 to 250 ASCII characters):
@@ -29,7 +28,7 @@ tasks. Your unlocks, rolls and partner come from that picker.
 
 ## Email
 
-The contact email address for this plugin is <contact email>.
+The contact email address for this plugin is chunkpickerplugin@gmail.com.
 
 ## Feedback and collaboration
 

@@ -48,8 +48,8 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
       Canada is case 2: list the endpoints and security measures and
       link a privacy notice. If traffic passes through a relay in the USA, it may be case 3,
       which also means sending Jagex private contact details through their form.
-- [ ] **Public contact email.** Decided 2026-10-27: a dedicated plugin mailbox
-      (to be created), forwarded from the picker's domain later. Required unless case 1. Jagex recommends an address
+- [x] **Public contact email.** Decided 2026-10-27: a dedicated plugin mailbox
+      chunkpickerplugin@gmail.com (created 2026-10-27), forwarded from the picker's domain later. Required unless case 1. Jagex recommends an address
       separate from the mod.io and RuneScape logins. mod.io can't sign in with
       addresses that contain `+`.
 - [x] **Feedback route and collaboration stance.** Decided 2026-10-27: GitHub issues
