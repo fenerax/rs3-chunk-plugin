@@ -90,8 +90,9 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 - [x] Show when the bank was last seen, because the game only updates it while
       it is open. The picker already does this. Staff allow cached observations
       of state the game showed you.
-- [ ] Check the Tasks window against the reported PrettyUI bugs: resize leak with
+- [x] Check the Tasks window against the reported PrettyUI bugs: resize leak with
       many components, leftover edge markers when hiding mid-drag, wheel scrolling.
+      No problems in the 2026-10-28 beta test.
 - [x] Set `version` to `1.0.0` (2026-10-28; build-release also checks the version
       `main.lua` shows). Every later upload needs a new version that matches the
       manifest, plus a changelog against the last approved version.
@@ -100,13 +101,20 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 
 ## 3. Final test on beta
 
-- [ ] Build the exact zip: `main.lua` and `plugin.json` at the top level, named
-      `chunk-picker-100.zip`, with no tests or `chunk-picker-test`.
-- [ ] Clean install of that zip on the beta world with PrettyUI installed from the
+- [x] Build the exact zip: `main.lua` and `plugin.json` at the top level, named
+      `chunk-picker-100.zip`, with no tests or `chunk-picker-test`. Built 2026-10-28
+      from 42b8f4e: 19 files, SHA-256 30F491BF…48334598, `urls` production only.
+- [x] Clean install of that zip on the beta world with PrettyUI installed from the
       Hub. Run every feature in the README: panel, shading, warning, Tasks
-      window, reports, key per server, character binding.
-- [ ] Confirm the permission grant with `Plugin.HasPermission` and a real request.
-      `ppe` reports success even for names that don't exist.
+      window, reports, key per server, character binding. Passed 2026-10-28,
+      unzipped as `chunk-picker-hub` against https://chunkpicker.ca. Chunk ids
+      matched at Lumbridge, Nardah, Anachronia, Wendlewick, Waiko and Lost Grove;
+      nothing posted in chat.
+- [x] Confirm the permission grant with `Plugin.HasPermission` and a real request.
+      `ppe` reports success even for names that don't exist. On beta the game never
+      prompted, and its permission toggle said the permission "could not be
+      changed"; `ppe chunk-picker-hub httpAccess` granted it and reports went
+      through. The Hub install prompt can only be checked after approval.
 
 ## 4. mod.io listing
 
