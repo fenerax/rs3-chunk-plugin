@@ -137,7 +137,7 @@ end
 -- saveSequence(n) (persists the report number).
 function M.new(options)
   local self = {history = {}, busy = false, failures = 0, nextAt = 0, blocked = false,
-    localhostConnected = false, message = "Not connected", sequence = options.sequence or 0,
+    serverConnected = false, message = "Not connected", sequence = options.sequence or 0,
     clockEpoch = nil, generation = 0}
   -- Wall-clock seconds: os.time when the client has it, else the picker's Date header plus
   -- the time elapsed since it arrived. nil until one of those is known.
@@ -207,7 +207,7 @@ function M.new(options)
       table.insert(self.history, 1, {code = code, timedOut = response.timedOut == true,
         failed = response.failed == true, errorInfo = info})
       if #self.history > 5 then table.remove(self.history) end
-      if code > 0 then self.localhostConnected = true end
+      if code > 0 then self.serverConnected = true end
       local date = M.dateEpoch(header(response, "Date"))
       if date then
         self.clockEpoch = date

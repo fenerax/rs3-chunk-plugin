@@ -65,7 +65,8 @@ RuneScape is a trademark of Jagex Ltd.
    client restarts. **Diagnostics** shows `http=true` once it worked.
 6. In the picker, open **More → Game plugin** and create a plugin key. In the
    game, open **Chunk Picker** in the Plugin Hub's Settings, choose the server
-   (**home** is a picker on `127.0.0.1:8789`), paste the key and click **Save**,
+   (**production** is the shared picker at `https://chunkpicker.ca`; **home** is a
+   picker on `127.0.0.1:8789`), paste the key and click **Save**,
    then **Test connection**. Each server keeps its own key, so choosing another
    server brings back the key saved for it, or asks for one.
 

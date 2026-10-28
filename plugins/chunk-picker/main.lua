@@ -157,7 +157,7 @@ local function diagnosticLines()
     "Skills: " .. progress.skillCount .. "/29; quest vars mapped=" .. tostring(progress.varMapped),
     "World.IsRegion: " .. tostring(World and type(World.IsRegion) == "function"),
     "Drag position saved: " .. panel.positionSaved,
-    "127.0.0.1 reached: " .. tostring(net.localhostConnected),
+    "Server reached: " .. tostring(net.serverConnected),
     "Clock: " .. (net:epoch(now) and "available" or "awaiting HTTP Date"),
     "World channel: id=1; beta=" .. tostring(store:get("beta", "Bool", true)),
     "Panel: " .. (panel.error or "ready") .. "; storage=" .. tostring(store.writeOK)

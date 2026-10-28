@@ -6,7 +6,8 @@
   "optionalPermissions": ["httpAccess"],
   "urls": {
     "scratch": "http://127.0.0.1:8950",
-    "home": "http://127.0.0.1:8789"
+    "home": "http://127.0.0.1:8789",
+    "production": "https://chunkpicker.ca"
   },
   "hasSettingsIcon": true,
   "hasRibbonIcon": true
