@@ -123,7 +123,8 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 - [x] Create the listing early, hidden, to reserve the name. Done 2026-10-28:
       https://mod.io/g/runescape/m/chunk-picker, Private, ID 6485729. The cover
       image is a temporary placeholder.
-- [ ] Summary of 10 to 250 ASCII characters, a 16:9 logo of at least 512×288, and screenshots.
+- [x] Summary of 10 to 250 ASCII characters, a 16:9 logo of at least 512×288, and screenshots.
+      Saved 2026-10-28: a 1280×720 cover from the beta test and six gallery images.
 - [ ] Homepage link to this repo.
 - [x] Description sections, following the example page. Written in
       [listing.md](listing.md) and saved on the listing (2026-10-28):
@@ -145,11 +146,14 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
       helpers, and "httpAccess (optional)" to match `optionalPermissions`.
 - [x] Add PrettyUI (6398181) as a mod.io dependency; it must match
       `requiredDependencies`. Saved 2026-10-28.
-- [ ] Platforms: tick what the upload form asks for. Staff said Windows, Mac and Linux
+- [x] Platforms: tick what the upload form asks for. Windows, Mac and Linux ticked
+      2026-10-28; the process page also asks for Source, which wasn't ticked. Staff said Windows, Mac and Linux
       (2026-10-05 and 10-08); the process page still shows an older table.
 
 ## 5. Submit and after
 
 - [ ] Optionally register the plugin through the Discord plugin-directory process.
-- [ ] Upload, submit, and leave mod.io untouched once moderation starts.
+- [x] Upload, submit, and leave mod.io untouched once moderation starts. 1.0.0
+      uploaded and published 2026-10-28 (shown as chunk-picker-100-6tpn.zip, 58.75 KB,
+      scan passed); Windows, Mac and Linux pending approval.
 - [ ] Work through the report; resubmit with a new version number.
