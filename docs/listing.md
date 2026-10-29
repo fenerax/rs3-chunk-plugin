@@ -34,7 +34,8 @@ The contact email address for this plugin is chunkpickerplugin@gmail.com.
 
 Bug reports and ideas are welcome as GitHub issues at
 https://github.com/fenerax/rs3-chunk-plugin/issues. If you'd like to contribute
-code, please open an issue first.
+code, please open an issue first. The code is MIT-licensed, and you may use it
+and its documentation with AI tools.
 
 ## EULA
 

@@ -203,3 +203,10 @@ with your chunk and coordinates. It sends nothing.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+**AI tools are welcome.** You may give this repository's code and documentation to
+AI models and coding tools (Claude Code, Codex, ChatGPT and similar) to read,
+explain, change or build on. Jagex's plugin guidelines require the author's
+explicit permission before another developer's plugin is used with AI, and this
+is that permission. Anything you copy is still under the MIT licence, so keep
+the copyright notice.

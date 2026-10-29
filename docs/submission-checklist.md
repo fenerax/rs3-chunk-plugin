@@ -158,3 +158,5 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
       uploaded and published 2026-10-28 (shown as chunk-picker-100-6tpn.zip, 58.75 KB,
       scan passed); Windows, Mac and Linux pending approval.
 - [ ] Work through the report; resubmit with a new version number.
+- [ ] With that update, copy the AI-permission sentence from [listing.md](listing.md)
+      to the mod.io description (added 2026-10-28, while the listing was frozen).
