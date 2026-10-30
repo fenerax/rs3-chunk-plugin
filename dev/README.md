@@ -44,6 +44,27 @@ file, a test file, anything named `dev`, or a cheat command.
 If a command can't run from the plugin, the window shows the exact command to
 type into the console yourself.
 
+## Native UI test plugin
+
+`dev/ui-native-test` is a second beta-only plugin for the window redesign. It
+builds one window from the game's own components only (no PrettyUI): a title
+bar, close and minimise buttons, two toggle buttons used as tabs, the native
+List with fake tasks and a scrollbar, and a resize grip in the bottom-right
+corner. It sends nothing, needs no permissions and types no commands.
+
+- **Drag: hold / click-click / native** cycles how the title bar moves the
+  window: press, move and release; click, move and click again; or the
+  game's own drag (`dragConfig`).
+- The grip resizes the same way (hold, or click and click again).
+- **Reset** puts the window back at its default place and size. Position and
+  size are saved in PersistentDB.
+- The footer shows the drag mode, how many components the window made, its
+  position and size, the mouse position and the last event. Every event is
+  also printed in the console.
+
+Load it with `pon ui-native-test` (see below). Closing it lasts until
+`prl ui-native-test`.
+
 ## Loading it next to the real plugin
 
 The dev path is a single folder, so link both plugins into one folder. In
@@ -54,8 +75,9 @@ powershell -File dev\link-dev-plugins.ps1
 ```
 
 It makes `%LOCALAPPDATA%\chunk-picker-dev-plugins` with junctions to
-`plugins\chunk-picker` and `dev\chunk-picker-dev`, and prints the console
-block. In the beta client's console (Alt + the key under Esc):
+`plugins\chunk-picker`, `dev\chunk-picker-dev` and `dev\ui-native-test`, and
+prints the console block. In the beta client's console (Alt + the key under
+Esc):
 
 ```text
 plugins_setpath C:\Users\<you>\AppData\Local\chunk-picker-dev-plugins
