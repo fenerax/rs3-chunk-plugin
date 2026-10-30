@@ -5,7 +5,7 @@ param([string]$Target = (Join-Path $env:LOCALAPPDATA 'chunk-picker-dev-plugins')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 New-Item -ItemType Directory -Force -Path $Target | Out-Null
-$links = @{ 'chunk-picker' = (Join-Path $repo 'plugins\chunk-picker'); 'chunk-picker-dev' = (Join-Path $repo 'dev\chunk-picker-dev') }
+$links = @{ 'chunk-picker' = (Join-Path $repo 'plugins\chunk-picker'); 'chunk-picker-dev' = (Join-Path $repo 'dev\chunk-picker-dev'); 'ui-native-test' = (Join-Path $repo 'dev\ui-native-test') }
 foreach ($name in $links.Keys) {
   $link = Join-Path $Target $name
   if (Test-Path -LiteralPath $link) {
@@ -22,3 +22,4 @@ Write-Output "  plugins_setpath $Target"
 Write-Output "  prf"
 Write-Output "  pon chunk-picker"
 Write-Output "  pon chunk-picker-dev"
+Write-Output "  pon ui-native-test   (only for the native window test)"
