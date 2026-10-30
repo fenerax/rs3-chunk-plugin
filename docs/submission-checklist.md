@@ -153,7 +153,10 @@ the [submission process](https://developer.runescape.com/rs/submission/process.h
 
 ## 5. Submit and after
 
-- [ ] Optionally register the plugin through the Discord plugin-directory process.
+- [x] Register the plugin in the Discord plugin directory. Done 2026-10-29 with
+      Friendlybot (`/plugin signup`, then `/plugin modio set`): Chunk Picker, mod.io
+      ID 6485729. This reserves the name and the mod.io ID; `/plugin list` shows
+      the entry.
 - [x] Upload, submit, and leave mod.io untouched once moderation starts. 1.0.0
       uploaded and published 2026-10-28 (shown as chunk-picker-100-6tpn.zip, 58.75 KB,
       scan passed); Windows, Mac and Linux pending approval.
