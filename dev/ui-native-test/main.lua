@@ -173,11 +173,45 @@ local function endDrag(why)
   note(kind .. " end (" .. why .. ") at " .. num(box.x) .. "," .. num(box.y) .. " " .. num(box.w) .. "x" .. num(box.h))
 end
 
+-- The game's interface scale setting (100% = 1), or 1 if the client doesn't say.
+local function interfaceScale()
+  local ok, s = pcall(function() return tonumber(game.options.InterfaceScale.setting) end)
+  if ok and s and s > 0 then return s / 100 end
+  return 1
+end
+
+-- Screen pixels per interface unit. Hook positions are in interface units, but the raw
+-- mouse can also carry Windows display scaling, so a click measures the real ratio
+-- (the same idea PrettyUI uses, BSD-3). Until a click has measured it, use the setting.
+local function scale()
+  if scaleGuess then return scaleGuess end
+  return interfaceScale()
+end
+
+-- A click on c at local (x, y) is at c.xyGlobal + (x, y) in interface units; the raw mouse
+-- is the same point in screen pixels. Trust only a sensible ratio that x and y agree on.
+local function calibrate(c, x, y)
+  pcall(function()
+    local gx, gy = xy(c.xyGlobal)
+    local mx, my = mouse()
+    if not (gx and mx and tonumber(x) and tonumber(y)) then return end
+    local ux, uy = gx + x, gy + y
+    local sx = math.abs(ux) >= 32 and mx / ux or nil
+    local sy = math.abs(uy) >= 32 and my / uy or nil
+    if sx and (sx < 0.5 or sx > 4) then sx = nil end
+    if sy and (sy < 0.5 or sy > 4) then sy = nil end
+    if sx and sy and math.abs(sx - sy) > (sx + sy) / 20 then return end
+    local s = sx or sy
+    if s then scaleGuess = s end
+  end)
+end
+
 local function followMouse()
   if not drag then return end
   local mx, my = mouse()
   if not mx then return end
-  local dx, dy = mx - drag.mx, my - drag.my
+  local k = scale()
+  local dx, dy = (mx - drag.mx) / k, (my - drag.my) / k
   if drag.kind == "move" then
     box.x, box.y = drag.x + dx, drag.y + dy
   else
@@ -202,13 +236,7 @@ end
 
 local function onHandleClick(x, y)
   note("title click " .. num(x) .. "," .. num(y))
-  -- If the click position is local to the title bar, mouse / (title global + click) is the
-  -- ratio between screen pixels and interface units. Shown in the footer, not used yet.
-  pcall(function()
-    local gx, gy = xy(handle.xyGlobal)
-    local mx = mouse()
-    if gx and mx and tonumber(x) and gx + x > 0 then scaleGuess = mx / (gx + x) end
-  end)
+  calibrate(handle, x, y)
   local m = MODES[mode]
   if m == "hold" then
     if drag then endDrag("click") else startDrag("move") end
@@ -218,8 +246,9 @@ local function onHandleClick(x, y)
 end
 
 -- The grip has no native drag: hold mode ends on release, the others on a second click.
-local function onGripClick()
+local function onGripClick(x, y)
   note("grip click")
+  calibrate(grip, x, y)
   if drag then endDrag("second click") else startDrag("size") end
 end
 
@@ -370,7 +399,7 @@ local function build()
   grip:SetPos(0, 0, 1.0, 1.0, 1.0, 1.0)
   pcall(function() grip.fill = true end)
   grip.colour = Vector4.new(1.0, 1.0, 1.0, 0.35)
-  hook(grip, "ONCLICK", function() onGripClick() end)
+  hook(grip, "ONCLICK", function(_, x, y) onGripClick(x, y) end)
   hook(grip, "ONRELEASE", function()
     note("grip release")
     if MODES[mode] == "hold" then endDrag("release") end
@@ -391,7 +420,7 @@ local function updateFooter()
     MODES[mode], made, num(box.x), num(box.y), num(box.w), num(box.h), num(pw), num(ph))
   local line2 = string.format("mouse %s,%s | win global %s,%s%s | %s",
     num(mx), num(my), num(rx), num(ry),
-    scaleGuess and string.format(" | scale %.2f", scaleGuess) or "",
+    string.format(" | scale %.2f %s (setting %.2f)", scale(), scaleGuess and "measured" or "assumed", interfaceScale()),
     events[1] or "no events yet")
   pcall(function() footer.content = line1 .. "\n" .. line2 end)
 end
