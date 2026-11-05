@@ -20,6 +20,8 @@ jobs:
       # Fengari stays outside the repo, as it does locally.
       - name: Install Fengari
         run: npm install --no-save --prefix "$RUNNER_TEMP/lua-harness" fengari@0.1.5
+      - name: Secret scan (patterns and reviewed hosts; the corpus runs in the pre-push hook)
+        run: node scripts/secret-scan/scan.mjs --without-corpus --tree HEAD
       - name: Run Node tests
         run: node --test "tests/**/*.test.*"
       - name: Run Lua tests

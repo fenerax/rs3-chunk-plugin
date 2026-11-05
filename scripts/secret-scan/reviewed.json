@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "hosts": [
+    {
+      "host": "chunkpicker.ca",
+      "reason": "The shared picker server the plugin reports to. Public production address, named in the listing and privacy notice."
+    },
+    {
+      "host": "example.com",
+      "reason": "Reserved documentation domain (RFC 2606); subdomains such as picker.example.com are test and documentation placeholders."
+    },
+    {
+      "host": "prettyui.j3.gg",
+      "reason": "PrettyUI, the public UI library the plugin requires."
+    },
+    {
+      "host": "dsc.gg",
+      "reason": "Public invite link to the RS3 plugin API council on Discord."
+    },
+    {
+      "host": "ico.org.uk",
+      "reason": "UK Information Commissioner's Office complaint page, cited in the privacy notice."
+    },
+    {
+      "host": "mod.io",
+      "reason": "The plugin's mod.io listing page."
+    },
+    {
+      "host": "runescape.com",
+      "reason": "Jagex's public game sites."
+    },
+    {
+      "host": "jagex.com",
+      "reason": "Jagex's public legal and company pages."
+    },
+    {
+      "host": "github.com",
+      "reason": "Public source repositories credited or used."
+    }
+  ],
+  "placeholders": [],
+  "lines": [
+    {
+      "path": "scripts/secret-scan/scan.mjs",
+      "category": "machine-path",
+      "sha256": "8c392e87390c94144827b8724eea57da1f5c86963b2239028430e2d48ed90e00",
+      "reason": "Scanner pattern source: the rules and their generic exemptions, not a value."
+    },
+    {
+      "path": "scripts/secret-scan/scan.mjs",
+      "category": "machine-path",
+      "sha256": "2ea2b5667208cfe17a8c475141c140a663cc5bca6f97aee0b96e043bef3249d0",
+      "reason": "Scanner pattern source: the rules and their generic exemptions, not a value."
+    },
+    {
+      "path": "scripts/secret-scan/scan.mjs",
+      "category": "service-binding",
+      "sha256": "3b49eaec4e7b9d9c6a00c46022d2419866568fcfb6728000b1150870f04288f1",
+      "reason": "Scanner pattern source: the rules and their generic exemptions, not a value."
+    },
+    {
+      "path": "scripts/secret-scan/scan.mjs",
+      "category": "token",
+      "sha256": "ad46f7b2756b826aa2929a2cbce7cf5cb06ff8da5d201113987e10cba749fdaa",
+      "reason": "Scanner pattern source: the rules and their generic exemptions, not a value."
+    },
+    {
+      "path": "docs/listing.md",
+      "category": "network-identifier",
+      "sha256": "2efc8a2519122ebdce7fd3e07ae9310537807d976939fc6400565bdf63d3359c",
+      "reason": "The plugin's public contact address, required by the Plugin Hub listing and privacy notice."
+    },
+    {
+      "path": "docs/submission-checklist.md",
+      "category": "network-identifier",
+      "sha256": "04f031e8f0d26b5a7a309d7f2fc42355f76dd00a9189818e9aa31486c83f56a5",
+      "reason": "The plugin's public contact address, required by the Plugin Hub listing and privacy notice."
+    },
+    {
+      "path": "PRIVACY.md",
+      "category": "network-identifier",
+      "sha256": "02681fd51cea43c0fe104fcf53a08340c91a53195b53b9bb327d768d73ba3e2b",
+      "reason": "The plugin's public contact address, required by the Plugin Hub listing and privacy notice."
+    },
+    {
+      "path": "PRIVACY.md",
+      "category": "network-identifier",
+      "sha256": "4f52f950e9c023a10b72e9dccd5970a8d82a0b960ade9c789fa9c7b71ab5a364",
+      "reason": "The plugin's public contact address, required by the Plugin Hub listing and privacy notice."
+    },
+    {
+      "path": "docs/listing.md",
+      "category": "network-identifier",
+      "sha256": "bdc1ea9146db673a58f324473aa410a5ee0beeaab970b07eb5ef79a26c1d6f0d",
+      "reason": "The public production address chunkpicker.ca followed by punctuation the scanner reads as part of the host."
+    },
+    {
+      "path": "docs/listing.md",
+      "category": "network-identifier",
+      "sha256": "73398b69e3fa1cbe9e4e3316f639dcf936f33434b7986b42e8f21e8ec1b2bbee",
+      "reason": "The public production address chunkpicker.ca followed by punctuation the scanner reads as part of the host."
+    },
+    {
+      "path": "docs/submission-checklist.md",
+      "category": "network-identifier",
+      "sha256": "0816815dd84690cf1b7cd792b01812fc1ea39b2817faad6e65dfc2b477f00b77",
+      "reason": "The public production address chunkpicker.ca followed by punctuation the scanner reads as part of the host."
+    },
+    {
+      "path": "PRIVACY.md",
+      "category": "network-identifier",
+      "sha256": "38c00ae1d6b2a02030f9766c6de096d3ef2d03073d12eed6413d7a16714ed296",
+      "reason": "The public production address chunkpicker.ca followed by punctuation the scanner reads as part of the host."
+    }
+  ]
+}
