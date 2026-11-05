@@ -1,18 +1,20 @@
 // Run: node tests/scratch-http.mjs <JSON requests exported by the Lua harness>
-// PICKER_SOURCE picks the picker checkout; SCRATCH_HTTP_PORT the free loopback port (default 8950).
+// Optional integration check: PICKER_SOURCE must point to a separate picker checkout.
+// SCRATCH_HTTP_PORT picks the free loopback port (default 8950).
 // Only the scratch child imports picker code; environment overrides precede imports.
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import net from 'node:net';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
-const source = process.env.PICKER_SOURCE ?? 'C:/Users/User/Projects/chunk-picker-rs3/.local/claude-tools/plugin-port';
+const source = process.env.PICKER_SOURCE ? path.resolve(process.env.PICKER_SOURCE) : undefined;
 const port = Number(process.env.SCRATCH_HTTP_PORT ?? 8950);
-const scratch = 'C:/Users/User/Projects/chunk-picker-rs3/.local/claude-tools/lua-harness/scratch-picker';
+const scratch = path.join(tmpdir(), 'cp-scratch-http');
 const origin = `http://127.0.0.1:${port}`;
 const reportPath = '/api/plugin/v1/report';
 const statusPath = '/api/plugin/v1/status';
@@ -149,7 +151,10 @@ async function main(fixtureFile) {
   await mkdir(scratch, { recursive: true });
   const directory = await mkdtemp(path.join(scratch, 'run-'));
   insideScratch(directory);
-  const child = fork(self, ['--serve', directory], { cwd: directory, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+  const child = fork(self, ['--serve', directory], {
+    cwd: directory, stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    env: { ...process.env, PICKER_SOURCE: source },
+  });
   let key;
   const exited = once(child, 'exit');
   try {
@@ -205,7 +210,6 @@ async function main(fixtureFile) {
     assert.deepEqual(state.members[0].unlocked, ['12850']);
     assert.equal(state.members[0].skillProgress, undefined);
     console.log(`PASS: ${requests.length} exported requests, status and task shapes (${tasks.ready ? `${tasks.allCount} active after a picker load` : 'no task data in this save'}), stale-sequence rejection and unchanged synthetic save`);
-    console.log(`Source: ${source}\nRuntime: ${directory}\nEndpoint: ${origin} (scratch child only)`);
   } finally {
     key = undefined;
     if (child.connected) child.send('stop');
@@ -219,6 +223,7 @@ async function main(fixtureFile) {
 }
 
 try {
+  assert.ok(source, 'Set PICKER_SOURCE to a picker checkout to run this optional integration check');
   if (process.argv[2] === '--serve') await serve(process.argv[3]);
   else await main(process.argv[2]);
 } catch (error) {
