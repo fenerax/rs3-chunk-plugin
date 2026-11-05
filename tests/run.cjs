@@ -1,7 +1,8 @@
 // No repo dependencies: point FENGARI_HOME at the external npm tooling directory.
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require(path.join(process.env.FENGARI_HOME || 'C:/Users/User/Projects/chunk-picker-rs3/.local/claude-tools/lua-harness', 'node_modules/fengari'));
+if (!process.env.FENGARI_HOME) throw Error('Set FENGARI_HOME to the external directory containing node_modules/fengari');
+const vm = require(path.resolve(process.env.FENGARI_HOME, 'node_modules/fengari'));
 const {lua, lauxlib, lualib, to_luastring, to_jsstring} = vm;
 const root = path.resolve(__dirname, '..');
 // extra: more module directories, searched after the plugin's own.
