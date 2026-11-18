@@ -347,6 +347,14 @@ broken['get:keyOwner']=nil; quiet(70,"still Bravo's key")
 values.keyOwner=nil; broken['set:keyOwner']=true; quiet(70,'an unbound key whose binding fails to save pauses')
 assert(values.keyOwner==nil); broken['set:keyOwner']=nil
 sends('the binding saves on a later try'); assert(values.keyOwner=='Charlie')
+-- A beta setting that can't be read pauses reports instead of sending them as live.
+broken['get:beta']=true; quiet(70,'an unreadable beta setting pauses reports')
+broken['get:beta']=nil; sends('reports resume once the beta setting reads')
+local function lastWorld() for i=#requests,1,-1 do if requests[i].path=='/api/plugin/v1/report' then return require('json').decode(requests[i].body).world end end end
+assert(lastWorld().beta==false,'an absent beta setting still reports live')
+values.beta=true; sends('a ticked beta setting reports'); assert(lastWorld().beta==true,'a ticked beta setting reports beta')
+values.beta=false; sends('an unticked beta setting reports'); assert(lastWorld().beta==false,'an unticked beta setting reports live')
+values.beta=nil
 -- A Forget that can't delete the key keeps its owner, says so, and the key stays bound.
 broken['delete:personalKey']=true; forget.action()
 assert(values.personalKey=='synthetic' and values.keyOwner=='Charlie' and settingsLine("Couldn't remove the key"))
