@@ -60,6 +60,22 @@ local function permission(name)
 end
 local permissionEvents = {}
 
+-- The API can't tell a beta world from a live one, so the player says so in Settings. Off by
+-- default: Hub players are on live worlds, and testers tick it before playing on beta. A
+-- setting that can't be read gives nil, and reports pause rather than guess live.
+local function onBeta()
+  local ok, value = store:read("beta", "Bool")
+  if not ok then return nil end
+  return value == true
+end
+local function world()
+  -- The public API exposes no current-world number. ID 1 is our fixed companion channel;
+  -- beta distinguishes imported/live character copies. No account/character identifier is sent.
+  local beta = onBeta()
+  if beta == nil then return nil end
+  return {id = 1, beta = beta}
+end
+
 -- The server handle and key to report with, or nil, nil and the reason the panel shows instead.
 local function connection()
   if not permission() then return nil, nil, "Allow web access in the plugin's permissions to connect" end
@@ -67,6 +83,7 @@ local function connection()
   if key == "" then return nil, nil, "Open plugin Settings, paste your personal key and Save" end
   local paused = identity:check(key)
   if paused then return nil, nil, paused end
+  if onBeta() == nil then return nil, nil, "Couldn't read the beta world setting; open Settings and Save" end
   local ok, handle = pcall(function() return Plugin.urls[store:server()] end)
   if not ok or not handle then return nil, nil, "Choose a manifest server in Settings" end
   return handle, key
@@ -88,16 +105,6 @@ end
 local function allowed(name)
   local ok, value = store:read(name, "Bool")
   return ok and value ~= false
-end
--- The API can't tell a beta world from a live one, so the player says so in Settings. Off by
--- default: Hub players are on live worlds, and testers tick it before playing on beta.
-local function onBeta()
-  return store:get("beta", "Bool", false)
-end
-local function world()
-  -- The public API exposes no current-world number. ID 1 is our fixed companion channel;
-  -- beta distinguishes imported/live character copies. No account/character identifier is sent.
-  return {id = 1, beta = onBeta()}
 end
 -- Sync now reads everything again and reports from the next game tick, without waiting for a
 -- move or the timers. A reading the picker already holds isn't sent twice. Presses count ten
@@ -164,7 +171,7 @@ local function diagnosticLines()
     "Drag position saved: " .. panel.positionSaved,
     "Server reached: " .. tostring(net.serverConnected),
     "Clock: " .. (net:epoch(now) and "available" or "awaiting HTTP Date"),
-    "World channel: id=1; beta=" .. tostring(onBeta()),
+    "World channel: id=1; beta=" .. (onBeta() == nil and "unreadable" or tostring(onBeta())),
     "Panel: " .. (panel.error or "ready") .. "; storage=" .. tostring(store.writeOK)
       .. "; resizable=" .. tostring(panel.resizable),
     "Payload: " .. (net.payloadWarning or "within 16 KB"),
@@ -334,14 +341,16 @@ subscribe("ServerLogic", function()
     and bank:pending(now) or nil
   if bankPart then skills, quests = nil, nil end
   local hasProgress = skills ~= nil or quests ~= nil or part ~= nil or held ~= nil or bankPart ~= nil
-  if handle and sync:due(now, hasProgress) and net:ready(now) then
+  -- Read once per send, so a setting that fails between checks still can't go out as live.
+  local reportWorld = handle and world()
+  if reportWorld and sync:due(now, hasProgress) and net:ready(now) then
     -- The position this report carries; the callback acknowledges it even if the player moved since.
     local reported = position
     -- Diagnostics ride along at most once a minute, never with achievements or items.
     local lines = not part and not held and not bankPart
       and (not lastDiagnostics or now - lastDiagnostics >= 60) and pickerLines() or nil
     if held then items:sent(heldKey, now) end
-    net:report(now, handle, key, world(), reported, skills, quests, function(ok, payload, status, code)
+    net:report(now, handle, key, reportWorld, reported, skills, quests, function(ok, payload, status, code)
       if ok then
         progress:ack(payload.skills, payload.quests)
         sync:ack(reported, now)
