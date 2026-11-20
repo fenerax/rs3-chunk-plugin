@@ -110,7 +110,11 @@ deleted, is in [PRIVACY.md](PRIVACY.md).
 - That storage is shared by every character on the PC, so each server's key
   remembers the character it was saved on. On any other character the plugin stops sending
   and says so, until you click **Use key on this character** in Settings. The
-  character name stays on your PC.
+  character name stays on your PC. A normalized RuneScape-name change in the
+  picker revokes existing keys: create a new key and pair again, even after Undo.
+- Pending equipment journals persist on disk and may enter your PC's backups.
+  The picker also retains journal evidence, including beta/unknown observations,
+  in its backups, including an encrypted cloud backup in the United States.
 - Diagnostics show which settings are present, never their values.
   **Do not share screenshots of Settings.**
 
@@ -160,9 +164,19 @@ Worn and backpack items are read at login, two seconds after an inventory
 change and every minute. They go after any achievement part, alone in a report,
 when the reading or the worn journal changed. A container the plugin can't read
 is sent as `null`, never as empty. Items worn while the picker wasn't listening
-wait in a journal of at most 32 events in local storage, kept for the character
-the key was saved on, until the picker's status acknowledges them. A refused
-items report waits half an hour.
+wait in local storage until the destination acknowledges delivery. Journals are
+separate for each character, manifest server and key binding. The store holds
+up to eight journals, 32 events each, within 64 KiB. Only empty, acknowledged
+slots are reused; pending journals are never evicted. At capacity, a new
+destination's observations stay in memory only and Diagnostics says the journal
+storage is full. They can be lost on closing the plugin. An unreadable or oversized
+store is preserved and new observations stay in memory. The old single-slot
+journal migrates with its recorded owner and waits for that owner's selected
+key before it can be sent. Old slots did not record a destination, so the first
+selected key belonging to that owner supplies the migration binding. Key
+fingerprints identify destinations without storing another copy of the key.
+Forgetting a key or disabling item reports does not erase pending journals.
+A refused items report waits half an hour.
 
 The coin pouch (container 623) and tool belt ride in the items report when the
 picker's status lists `pouch` and `toolbelt` under `accepts`. Tool belt rows are

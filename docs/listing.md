@@ -88,6 +88,10 @@ above.
 
 Your position and diagnostics are not stored between sessions; the server keeps
 them in memory only. Progress you apply becomes part of your picker save, and
-live-world item evidence is kept beside it. The plugin stores its settings,
-your keys, the character each key belongs to and a short list of recent
-equipment changes on your PC.
+live-world item evidence and equipment journals (including beta and unknown
+observations) persist with the picker and enter backups. Backups include an
+encrypted cloud copy stored in the United States. The plugin stores its
+settings, your keys, the character each key belongs to and up to eight equipment
+journals of 32 events each on your PC. Pending journals remain until delivery is
+acknowledged and may enter your PC's backups. Forget key does not erase them.
+See the privacy notice for retention and deletion details.

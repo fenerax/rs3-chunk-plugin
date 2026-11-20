@@ -249,7 +249,7 @@ function M.new(store, callbacks, options)
         self:message(forgotten and "Key forgotten" or "Couldn't remove the key; try again")
         if forgotten and self.keyStatus then self.keyStatus.content = keyLine("") end
       end, {inline = true})
-      -- After a name change, or to move the key to this character on purpose.
+      -- Moves the local binding only; a picker-side name change requires a new key.
       page:AddSimpleButton("Use key on this character", function()
         local name = identity.current()
         if not name then
@@ -272,6 +272,7 @@ function M.new(store, callbacks, options)
       end)
       self.result = page:AddText({text = "Save your key, then test the connection.",
         height = 48, maxLines = 2})
+      page:AddText("A RuneScape-name change in the picker can revoke your key. Create a new key and pair again, even after Undo.")
     end)
     section("options", function()
       checkboxes(page, {
@@ -283,6 +284,8 @@ function M.new(store, callbacks, options)
       }, true)
       checkboxes(page, {{"beta", "I'm playing on the beta world (the picker ticks nothing)"}}, false)
       page:AddText("The picker may tick tasks for achievements you completed and gear you own; other progress waits for review there. Nothing here unlocks a chunk.")
+      page:AddText("Pending equipment journals stay on disk, separately for each character and key. Forget key does not erase them. Up to 8 journals of 32 events are kept; when full, new observations stay in memory only. See Diagnostics.")
+      page:AddText("Equipment journals, including beta/unknown observations, can enter PC and picker backups. The picker keeps an encrypted cloud backup in the United States. See PRIVACY.md for retention and deletion details.")
     end)
   end
   local function look(page)

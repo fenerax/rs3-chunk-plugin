@@ -1,6 +1,7 @@
 -- Runner sets package.path to the plugin directory before loading this file.
 local items = require("items")
 local json = require("json")
+local sha256 = require("sha256")
 local function eq(actual, expected, why)
   assert(actual == expected, (why or "") .. ": " .. tostring(actual) .. " ~= " .. tostring(expected))
 end
@@ -17,6 +18,20 @@ local store = require("store").new(db)
 local who = "Alpha"
 Player = {GetEntity = function() return {displayName = who, isValid = true} end}
 values.keyOwner = "Alpha"
+values.personalKey = "synthetic-alpha-key"
+values.server = "scratch"
+local function savedJournal()
+  local saved = json.decode(values.itemJournal)
+  if saved.version ~= 2 then return saved end
+  local destination = sha256.hex(json.encode(json.array({values.server, values.personalKey})))
+  for _, journal in ipairs(saved.journals) do
+    if journal.owner == who and journal.destination == destination then return journal end
+  end
+end
+eq(sha256.hex(""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "SHA-256 empty")
+eq(sha256.hex("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 abc")
+eq(sha256.hex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
+  "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1", "SHA-256 multiple blocks")
 -- Containers by numeric id; config.Inv names are absent unless a test adds them.
 local invs = {}
 local function slot(id, name, count) return {obj = {id = id, name = name}, count = count or 1} end
@@ -57,7 +72,7 @@ tracker:login(0)
 local body, key = tracker:pending(0)
 eq(#body.snapshot, 16, "snapshot"); eq(#body.worn, 2); eq(#body.backpack, 1)
 eq(#body.journal.id, 16, "journal id"); eq(#body.journal.events, 2, "worn items journalled")
-local saved = json.decode(values.itemJournal)
+local saved = savedJournal()
 eq(saved.owner, "Alpha"); eq(saved.next, 3); eq(saved.id, body.journal.id)
 local encoded = json.encode(body)
 assert(encoded:find('"journal":{"events":%[%[1,'), encoded)
@@ -66,7 +81,7 @@ tracker:sent(key, 0)
 eq(tracker:pending(30), nil, "no flood"); assert(tracker:pending(61), "then again")
 -- The acknowledgement drops held events and stops resending.
 tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = 1}}}, 61)
-eq(#json.decode(values.itemJournal).events, 1, "event 1 dropped")
+eq(#savedJournal().events, 1, "event 1 dropped")
 body = tracker:pending(62); eq(#body.journal.events, 1, "event 2 still offered"); eq(body.journal.events[1][1], 2)
 tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = 2}}}, 62)
 eq(tracker:pending(63), nil, "all acknowledged")
@@ -74,10 +89,10 @@ eq(tracker:pending(63), nil, "all acknowledged")
 tracker:tick(63)
 invs[94] = inv({slot(1205, "Adamant dagger"), slot(34828, "Gud raider shield")})
 tracker:inventory(64); tracker:tick(65); eq(tracker:pending(65), nil, "reads wait for the delay")
-tracker:tick(66); body = tracker:pending(66); assert(body, "a change is offered")
+tracker:tick(66); body, key = tracker:pending(66); assert(body, "a change is offered"); tracker:sent(key, 66)
 eq(#body.journal.events, 1); eq(body.journal.events[1][2], 34828, "only the newly worn item")
 tracker:sync({items = {snapshot = body.snapshot, journal = {id = "ffffffffffffffff", event = 9}}}, 66)
-eq(#json.decode(values.itemJournal).events, 1, "foreign ack ignored")
+eq(#savedJournal().events, 1, "foreign ack ignored")
 -- A picker restart forgets everything; the plugin offers the reading again.
 tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = 3}}}, 67)
 eq(tracker:pending(67), nil); tracker:sync({state = "locked"}, 68); assert(tracker:pending(68), "resent after restart")
@@ -86,7 +101,7 @@ tracker:refused(68); eq(tracker:pending(1000), nil); assert(tracker:pending(68 +
 
 -- The journal survives a restart of the plugin and keeps counting.
 invs[94] = inv({slot(34828, "Gud raider shield"), slot(34832, "Gud raider axe")})
-local id = json.decode(values.itemJournal).id
+local id = savedJournal().id
 tracker = items.new(store); tracker:login(100)
 body = tracker:pending(100); eq(body.journal.id, id, "same journal")
 -- Its acknowledged events are gone, so a new session notes the shield again (4), then the axe (5).
@@ -105,26 +120,104 @@ local stored = values.itemJournal
 who = "Bravo"; tracker = items.new(store); tracker:login(200)
 eq(values.itemJournal, stored, "another character leaves the journal alone")
 assert(tracker:describe():find("memory only"), tracker:describe())
--- A key saved on a new character starts a new journal for it.
-values.keyOwner = "Bravo"; tracker:readNow(201)
-saved = json.decode(values.itemJournal); eq(saved.owner, "Bravo"); assert(saved.id ~= id, "new journal id")
+eq(tracker:pending(200), nil, "another character cannot upload even a memory journal")
+-- A second legitimate key gets a separate slot while Alpha's brief wearing stays pending.
+values.keyOwner, values.personalKey = "Bravo", "synthetic-bravo-key"
+invs[94] = inv({slot(2222, "Bravo boots")}); tracker:readNow(201)
+saved = savedJournal(); eq(saved.owner, "Bravo"); assert(saved.id ~= id, "new journal id")
+eq(#json.decode(values.itemJournal).journals, 2, "both legitimate destinations retained")
+body, key = tracker:pending(201); tracker:sent(key, 201)
+eq(#body.journal.events, 1); eq(body.journal.events[1][2], 2222, "no Alpha items under Bravo key")
+local bravoId = body.journal.id
+-- A late Alpha ack cannot remove Bravo events.
+tracker:sync({items = {journal = {id = id, event = 99}}}, 202)
+eq(#savedJournal().events, 1, "foreign destination ack ignored")
+tracker:sync({items = {snapshot = body.snapshot, journal = {id = bravoId, event = 1}}}, 202)
+eq(#savedJournal().events, 0, "only Bravo delivered prefix removed")
+values.keyOwner, values.personalKey, who = "Alpha", "synthetic-alpha-key", "Alpha"
+invs[94] = inv({}) -- Alpha no longer wears the items; only the retained journal observes them.
+tracker = items.new(store); tracker:login(203)
+body = tracker:pending(203); eq(body.journal.id, id); eq(#body.journal.events, 2, "Alpha pending observations survive")
+eq(body.journal.events[2][2], 34832, "briefly worn axe still offered")
+-- Changing just the key, or just the server, also selects an independent journal immediately.
+local alphaPending = json.encode(savedJournal())
+values.personalKey = "synthetic-alpha-second-key"
+tracker:sync({items = {journal = {id = id, event = 99}}}, 204)
+values.personalKey = "synthetic-alpha-key"
+eq(json.encode(savedJournal()), alphaPending, "late ack after key change cannot remove old events")
+values.personalKey = "synthetic-alpha-second-key"
+body = tracker:pending(204); assert(body.journal.id ~= id); eq(#body.journal.events, 0, "old events cannot use a new key")
+values.server = "home"; body = tracker:pending(205); eq(#body.journal.events, 0, "server has its own destination")
+values.server, values.personalKey = "scratch", "synthetic-alpha-key"
+body = tracker:pending(206); eq(json.encode(savedJournal()), alphaPending, "key and server switches preserve pending journal")
+eq(body.journal.id, id)
 -- A journal that can't be read is never overwritten.
 values.keyOwner = "Alpha"; who = "Alpha"; values.itemJournal = stored; broken.itemJournal = true
 tracker = items.new(store); tracker:login(300)
 broken.itemJournal = nil; eq(values.itemJournal, stored, "unreadable journal kept")
 assert(tracker:describe():find("memory only"))
--- Malformed journals start again.
-for _, text in ipairs({"not json", '{"id":"zz","owner":"Alpha","next":1,"events":[]}', '{"id":"0123456789abcdef","owner":"Alpha","next":2,"events":[5]}',
+-- Malformed single-slot journals start again; undecodable storage is preserved.
+values.itemJournal = "not json"; tracker = items.new(store); tracker:login(399)
+eq(values.itemJournal, "not json"); assert(tracker:describe():find("memory only"))
+for _, text in ipairs({'{"id":"zz","owner":"Alpha","next":1,"events":[]}', '{"id":"0123456789abcdef","owner":"Alpha","next":2,"events":[5]}',
   '{"id":"0123456789abcdef","owner":"Alpha","next":2,"events":[[1,5,"A"],[1,6,"B"]]}'}) do
   values.itemJournal = text; tracker = items.new(store); tracker:login(400)
-  local fresh = json.decode(values.itemJournal); eq(fresh.owner, "Alpha", text); assert(fresh.id ~= "0123456789abcdef", text)
+  local fresh = savedJournal(); eq(fresh.owner, "Alpha", text); assert(fresh.id ~= "0123456789abcdef", text)
 end
+
+-- Migration follows the recorded owner even when another properly bound character opens first.
+local legacy = '{"id":"0123456789abcdef","owner":"Alpha","next":3,"events":[[1,51,"Old hat"],[2,52,"Old boots"]]}'
+values.itemJournal = legacy
+who, values.keyOwner, values.personalKey = "Bravo", "Bravo", "synthetic-bravo-key"
+invs[94] = inv({slot(2222, "Bravo boots")}); tracker = items.new(store); tracker:login(410)
+eq(#json.decode(values.itemJournal).journals, 2, "legacy slot migrated alongside Bravo")
+body, key = tracker:pending(410); tracker:sent(key, 410)
+tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = 1}}}, 411)
+local migrated = json.decode(values.itemJournal).journals[1]
+eq(migrated.owner, "Alpha"); eq(migrated.destination, nil, "unrelated key never claims old slot")
+eq(#migrated.events, 2, "Bravo ack keeps migrated Alpha events")
+who, values.keyOwner, values.personalKey = "Alpha", "Alpha", "synthetic-alpha-key"
+invs[94] = inv({}); tracker = items.new(store); tracker:login(412)
+body, key = tracker:pending(412); eq(body.journal.id, "0123456789abcdef"); eq(#body.journal.events, 2)
+tracker:sent(key, 412)
+tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = 1}}}, 413)
+eq(#savedJournal().events, 1); eq(savedJournal().events[1][1], 2, "migration retains unacknowledged suffix")
+tracker = items.new(store); tracker:login(414); eq(#tracker:pending(414).journal.events, 1, "migration survives restart")
+
+-- Capacity never evicts pending observations, and acknowledged empty slots can be reused.
+values.itemJournal = nil
+for i = 1, items.MAX_JOURNALS do
+  who, values.keyOwner, values.personalKey = "Character" .. i, "Character" .. i, "synthetic-key-" .. i
+  local outfit = {}; for n = 1, items.JOURNAL do outfit[n] = slot(i * 100 + n, string.rep('"', 80)) end
+  invs[94] = inv(outfit); tracker = items.new(store); tracker:login(420 + i)
+  eq(#savedJournal().events, items.JOURNAL); assert(#values.itemJournal <= items.STORE_BYTES)
+end
+local atCapacity = values.itemJournal
+who, values.keyOwner, values.personalKey = "Overflow", "Overflow", "synthetic-overflow-key"
+tracker = items.new(store); tracker:login(440)
+eq(values.itemJournal, atCapacity, "all pending slots kept at capacity")
+assert(tracker:describe():find("journal storage full")); assert(tracker:describe():find("memory only"))
+who, values.keyOwner, values.personalKey = "Character1", "Character1", "synthetic-key-1"
+invs[94] = inv({}); tracker = items.new(store); tracker:login(441)
+body, key = tracker:pending(441); tracker:sent(key, 441)
+tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = items.JOURNAL}}}, 442)
+who, values.keyOwner, values.personalKey = "Overflow", "Overflow", "synthetic-overflow-key"
+tracker = items.new(store); tracker:login(443)
+eq(#json.decode(values.itemJournal).journals, items.MAX_JOURNALS, "empty slot reused within bound")
+assert(savedJournal(), "new destination persisted after room made")
+-- Oversized persisted documents are never overwritten or decoded into an unbounded store.
+values.itemJournal = string.rep(" ", items.STORE_BYTES) .. atCapacity
+local oversized = values.itemJournal
+tracker = items.new(store); tracker:login(444); eq(values.itemJournal, oversized)
+assert(tracker:describe():find("memory only"))
+who, values.keyOwner, values.personalKey = "Alpha", "Alpha", "synthetic-alpha-key"
 
 -- The journal holds at most 32 events; more worn items wait for room.
 values.itemJournal = nil
 local many = {}; for i = 1, 40 do many[i] = slot(1000 + i, "Ring " .. i) end
 invs[94] = inv(many); tracker = items.new(store); tracker:login(500)
-body = tracker:pending(500); eq(#body.journal.events, 32, "bounded"); assert(tracker:describe():find("journal full"))
+body, key = tracker:pending(500); tracker:sent(key, 500)
+eq(#body.journal.events, 32, "bounded"); assert(tracker:describe():find("journal full"))
 tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = 32}}}, 501)
 assert(not tracker:describe():find("journal full"), "room again")
 -- Reports stay under 16 KB: the newest journal events wait, and oversized containers are held.
@@ -135,8 +228,12 @@ values.itemJournal = nil; invs[94] = inv(full); invs[93] = inv({slot(1, "One")})
 tracker = items.new(store); tracker:login(600)
 body = tracker:pending(600)
 assert(#json.encode(body) <= items.MAX_BYTES, "within the cap"); eq(#body.journal.events, 32, "fits")
-invs[93] = inv(bag); tracker:readNow(601); body = tracker:pending(601)
+invs[93] = inv(bag); tracker:readNow(601); body, key = tracker:pending(601)
 assert(body and #json.encode(body) <= items.MAX_BYTES and #body.journal.events < 32, "journal trimmed")
+local delivered = #body.journal.events
+tracker:sent(key, 601)
+tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = 999}}}, 601)
+eq(#savedJournal().events, 32 - delivered, "ack cannot discard events omitted to fit report")
 -- Two full containers at the widest values still fit without the journal.
 local wide = {}; for i = 1, 64 do wide[i] = slot(999990 + i % 10, long, 2147483647) end
 invs[93], invs[94] = inv(wide), inv(wide); tracker:readNow(602)
@@ -206,7 +303,9 @@ values.itemJournal = nil; invs[93], invs[94] = inv(wide), inv(wide)
 tracker = items.new(store); tracker:login(2000)
 body, key = tracker:pending(2000, {pouch = true, toolbelt = true})
 assert(body and #json.encode(body) <= items.MAX_BYTES, "within the cap"); eq(body.toolbelt, json.null, "belt dropped")
+local initialEvents = #savedJournal().events
 tracker:sent(key, 2000); tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = 1000}}}, 2001)
-eq(tracker:pending(2100, {pouch = true, toolbelt = true}), nil, "a trimmed reading, once acknowledged, isn't resent")
+eq(#savedJournal().events, initialEvents - #body.journal.events, "only delivered events leave the trimmed reading")
+assert(tracker:pending(2100, {pouch = true, toolbelt = true}), "omitted events remain retryable")
 var = nil
 print("items tests passed")

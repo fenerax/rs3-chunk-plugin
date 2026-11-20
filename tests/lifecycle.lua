@@ -499,7 +499,11 @@ local b=got[1]
 assert(b.skills==nil and b.quests==nil and b.diagnostics==nil and b.achievements==nil,'items travel alone')
 assert(b.items.worn[1][2]==34830 and b.items.backpack[1][2]==857 and #b.items.journal.events==1)
 assert(#withItems(pump(700,itemPicker))==0,'an acknowledged reading is not sent again')
-assert(#json.decode(values.itemJournal).events==0,'acknowledged events leave the journal')
+local deliveredJournal
+for _,journal in ipairs(json.decode(values.itemJournal).journals) do
+  if journal.id==b.items.journal.id then deliveredJournal=journal end
+end
+assert(deliveredJournal and #deliveredJournal.events==0,'acknowledged events leave the destination journal')
 invs[94]=container(34828,'Gud raider shield'); emit('InventoryUpdated',{})
 got=withItems(pump(30,itemPicker)); assert(#got==1 and got[1].items.journal.events[1][2]==34828,'a change goes soon')
 invs[94]=container(34832,'Gud raider axe'); emit('InventoryUpdated',{})
