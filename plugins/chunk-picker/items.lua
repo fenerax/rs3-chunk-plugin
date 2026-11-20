@@ -4,14 +4,16 @@
 -- The container names are undocumented, so each read tries likely config.Inv names, then the
 -- classic ids (93 backpack, 94 worn). A container that can't be read is sent as null, never as
 -- empty, so a hiccup never looks like having nothing.
--- Worn items also go into a small journal kept in PersistentDB for the key's character, so
+-- Worn items also go into bounded journals kept in PersistentDB per character and destination, so
 -- something worn while the picker wasn't listening still reaches it. Events leave the journal
 -- once the picker's status acknowledges them.
 local json = require("json")
 local achievements = require("achievements")
 local identity = require("identity")
+local sha256 = require("sha256")
 local M = {MAX_SLOTS = 64, MAX_ID = 1000000, MAX_COUNT = 2147483647, JOURNAL = 32, PERIOD = 60, DELAY = 2,
   RESEND = 60, REFUSED = 1800, MAX_BYTES = 14000, KEY = "itemJournal",
+  MAX_JOURNALS = 8, STORE_BYTES = 65536,
   BELT_ROWS = 128, BELT_MAX = 1000, BELT_RETRY = 600,
   -- Names and ids to try for each container, in order.
   BACKPACK = {"INV", "BACKPACK", "INVENTORY", 93},
@@ -130,16 +132,25 @@ function M.coins(rows)
   return string.format("%.0f", total)
 end
 -- The journal belongs to the character the key was saved on, and only that character adds to it.
-local function owner(store)
+local function binding(store)
   local name = identity.current()
   local ok, keyOwner = store:read("keyOwner", "String")
-  if name and ok and keyOwner == name then return name end
+  local readKey, key = store:read("personalKey", "String")
+  local readServer, server = store:read("server", "String")
+  if name and #name <= 80 and ok and keyOwner == name and readKey and type(key) == "string"
+      and key ~= "" and #key <= 1024 and readServer then
+    server = server or store:server()
+    if type(server) == "string" and #server <= 80 then
+      return name, sha256.hex(json.encode(json.array({server, key})))
+    end
+  end
 end
 -- A stored journal, or nil unless every part checks out: right owner, a 16-hex-digit id, and
 -- events [n, id, label] numbered upwards and below `next`.
 local function parse(text, name)
   local value = json.decode(text)
-  if type(value) ~= "table" or value.owner ~= name or type(value.id) ~= "string"
+  if type(value) ~= "table" or type(value.owner) ~= "string" or #value.owner > 80
+    or value.owner == "" or (name and value.owner ~= name) or type(value.id) ~= "string"
     or not value.id:match("^%x+$") or #value.id ~= 16 or type(value.events) ~= "table" then return nil end
   local nextEvent = math.tointeger(value.next)
   if not nextEvent or nextEvent < 1 then return nil end
@@ -154,40 +165,79 @@ local function parse(text, name)
     last = n
   end
   if #events > M.JOURNAL then return nil end
-  return {id = value.id:lower(), owner = name, next = nextEvent, events = events}
+  local destination = value.destination
+  if destination ~= nil and (type(destination) ~= "string" or #destination ~= 64
+      or not destination:match("^[a-f0-9]+$")) then return nil end
+  return {id = value.id:lower(), owner = value.owner, destination = destination, next = nextEvent, events = events}
 end
-local function decode(text, name)
-  local ok, journal = pcall(parse, text, name)
-  if ok then return journal end
+-- Version 2 retains independent journals. A legacy slot has no destination: preserve its
+-- recorded owner and bind it only when that owner's key is selected, never the next login's.
+local function catalog(text)
+  if text == nil then return {} end
+  if type(text) ~= "string" or #text > M.STORE_BYTES then return nil end
+  local ok, value = pcall(json.decode, text)
+  if not ok or type(value) ~= "table" then return nil end
+  if value.version ~= 2 then
+    local valid, old = pcall(parse, text)
+    return valid and old and {old} or {}
+  end
+  if type(value.journals) ~= "table" or #value.journals > M.MAX_JOURNALS then return nil end
+  local journals, seen = {}, {}
+  for _, entry in ipairs(value.journals) do
+    local valid, journal = pcall(parse, json.encode(entry))
+    if not valid or not journal then return nil end
+    local key = journal.owner .. ":" .. (journal.destination or "legacy")
+    if seen[key] then return nil end
+    seen[key] = true
+    journals[#journals + 1] = journal
+  end
+  return journals
+end
+local function encoded(journals)
+  local entries = json.array()
+  for _, journal in ipairs(journals) do
+    local events = json.array()
+    for i, event in ipairs(journal.events) do events[i] = json.array({event[1], event[2], event[3]}) end
+    entries[#entries + 1] = {id = journal.id, owner = journal.owner, destination = journal.destination,
+      next = journal.next, events = events}
+  end
+  return json.encode({version = 2, journals = entries})
 end
 function M.new(store)
   local self = {}
   function self:reset()
     self.worn, self.backpack, self.pouch, self.toolbelt, self.snapshot, self.via = nil, nil, nil, nil, nil, {}
     self.beltVars, self.beltTriedAt, self.read = nil, nil, false
-    self.lastWorn, self.journal, self.saved = nil, nil, nil
+    self.lastWorn, self.journal, self.saved, self.journals = nil, nil, nil, nil
+    self.bindingOwner, self.destination, self.retentionFull = nil, nil, false
     self.readAt, self.promptAt, self.refusedUntil, self.acked = nil, nil, nil, nil
-    self.sentKey, self.sentAt, self.full = nil, nil, false
+    self.sentKey, self.sentAt, self.full, self.offered, self.delivered = nil, nil, false, nil, nil
     self.state = "waiting for login"
   end
   -- A new connection forgets the picker's acknowledgement and any refusal; both belonged to it.
-  function self:resend() self.acked, self.refusedUntil, self.sentKey = nil, nil, nil end
+  function self:resend()
+    self.acked, self.refusedUntil, self.sentKey, self.offered, self.delivered = nil, nil, nil, nil, nil
+  end
   function self:save()
     local journal = self.journal
-    if not journal or not journal.owner then return end
-    local events = json.array()
-    for i, event in ipairs(journal.events) do events[i] = json.array({event[1], event[2], event[3]}) end
-    self.saved = store:set(M.KEY, "String",
-      json.encode({id = journal.id, owner = journal.owner, next = journal.next, events = events}))
+    if not journal or not journal.owner or not self.journals then return end
+    local text = encoded(self.journals)
+    if #text > M.STORE_BYTES then self.saved, self.retentionFull = false, true; return end
+    self.saved = store:set(M.KEY, "String", text)
+    local readable, saved = store:read(M.KEY, "String")
+    self.saved = self.saved and readable and saved == text
   end
   -- Loads this character's journal, or starts a new one with a fresh id. A journal that can't
   -- be read stays in memory only, so it never overwrites one that might still be there.
   function self:open(now)
-    local name = owner(store)
-    if self.journal and self.journal.owner == name then return end
+    local name, destination = binding(store)
+    if self.journal and self.bindingOwner == name and self.destination == destination then return end
+    self.bindingOwner, self.destination = name, destination
+    self:resend()
+    self.lastWorn, self.journals, self.retentionFull, self.full = nil, nil, false, false
     local fresh = {id = hex16(tostring(now) .. "|" .. tostring(math.random and math.random() or 0)
         .. "|" .. tostring(self.journal and self.journal.id)),
-      owner = name, next = 1, events = {}}
+      owner = name, destination = destination, next = 1, events = {}}
     if not name then
       self.journal = fresh
       self.journal.owner = nil
@@ -200,11 +250,33 @@ function M.new(store)
       self.saved = false
       return
     end
-    local loaded = type(text) == "string" and decode(text, name)
-    if loaded then
-      self.journal = loaded
+    local journals = catalog(text)
+    if not journals then
+      self.journal, self.saved = fresh, false
+      self.journal.owner = nil
       return
     end
+    self.journals = journals
+    for _, journal in ipairs(journals) do
+      if journal.owner == name and (journal.destination == destination or journal.destination == nil) then
+        journal.destination = destination
+        self.journal = journal
+        self:save()
+        return
+      end
+    end
+    -- Reuse only an empty, fully acknowledged slot. Pending journals are never evicted.
+    if #journals >= M.MAX_JOURNALS then
+      for i, journal in ipairs(journals) do
+        if #journal.events == 0 then table.remove(journals, i); break end
+      end
+    end
+    if #journals >= M.MAX_JOURNALS then
+      self.journal, self.retentionFull = fresh, true
+      self.journal.owner = nil -- new observations remain in memory; old journals stay on disk
+      return
+    end
+    journals[#journals + 1] = fresh
     self.journal = fresh
     self:save()
   end
@@ -269,6 +341,10 @@ function M.new(store)
   -- snapshot names exactly the containers sent.
   function self:pending(now, extras)
     if not self.read or (self.refusedUntil and now < self.refusedUntil) then return nil end
+    local name, destination = binding(store)
+    if name ~= self.bindingOwner or destination ~= self.destination then self:readNow(now) end
+    -- A mismatched/unreadable binding never uploads even its memory-only journal.
+    if not self.bindingOwner then return nil end
     extras = extras or {}
     local function content(belt)
       local list = {self.worn or json.null, self.backpack or json.null}
@@ -310,24 +386,33 @@ function M.new(store)
       self.state = "too large to send; held"
       return nil
     end
+    self.offered = {key = key, id = journal.id, event = events[#events] and events[#events][1] or 0}
     return items, key
   end
-  function self:sent(key, now) self.sentKey, self.sentAt = key, now end
+  function self:sent(key, now)
+    self.sentKey, self.sentAt = key, now
+    if self.offered and self.offered.key == key then self.delivered = self.offered end
+  end
   -- The picker's status names the last reading and journal event it holds; events it holds leave
   -- the journal.
   function self:sync(status, now)
     if type(status) ~= "table" then return end
+    local name, destination = binding(store)
+    if not name or name ~= self.bindingOwner or destination ~= self.destination then return end
     local held = status.items
     if type(held) ~= "table" then
       self.acked = nil
       return
     end
-    self.acked = held
+    -- Only discard a prefix actually included in a sent report for this destination.
+    local delivered = self.delivered
+    local ack = type(held.journal) == "table" and held.journal
+    local event = ack and delivered and ack.id == delivered.id and math.tointeger(ack.event)
+    event = event and math.min(event, delivered.event)
+    self.acked = {snapshot = held.snapshot, journal = event and {id = ack.id, event = event} or nil}
     if held.snapshot == self.snapshot then self.state = "sent" end
     local journal = self.journal
-    local ack = type(held.journal) == "table" and held.journal
-    local event = ack and ack.id == (journal and journal.id) and math.tointeger(ack.event)
-    if not event then return end
+    if not event or not journal or ack.id ~= journal.id then return end
     local kept = {}
     for _, row in ipairs(journal.events) do
       if row[1] > event then kept[#kept + 1] = row end
@@ -351,6 +436,7 @@ function M.new(store)
       .. "; journal=" .. (journal and (#journal.events
         .. (journal.owner and (self.saved == false and " (not saved)" or "") or " (memory only)")) or "-")
       .. (self.full and "; journal full" or "")
+      .. (self.retentionFull and "; journal storage full; pending journals kept" or "")
   end
   self:reset()
   return self
