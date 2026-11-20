@@ -21,12 +21,29 @@ function M.counts(position, status)
   end
   return table.concat(parts, " · ")
 end
+local function rollSummaryText(summary)
+  if type(summary) ~= "table" then return nil end
+  local parts = {}
+  if type(summary.newTasks) == "table" then
+    local total = 0
+    for _, key in ipairs({"skills", "quests", "diaries", "other"}) do
+      local n = math.tointeger(summary.newTasks[key])
+      if n and n > 0 then total = total + n end
+    end
+    if total > 0 then parts[#parts + 1] = "+" .. total .. (total == 1 and " task" or " tasks") end
+  end
+  if type(summary.highlights) == "table" and #summary.highlights > 0 then
+    local top = clean(summary.highlights[1], 40)
+    if top and top ~= "" then parts[#parts + 1] = top end
+  end
+  return #parts > 0 and table.concat(parts, ": ") or nil
+end
 -- Partner chunks and a waiting roll, from the picker's status.
 function M.extra(status, showPartner)
   if type(status) ~= "table" then return "" end
   local lines = {}
   if showPartner and type(status.partners) == "table" then
-    for i = 1, math.min(#status.partners, 3) do
+    for i = 1, math.min(#status.partners, 4) do
       local partner = status.partners[i]
       local name = type(partner) == "table" and clean(partner.name, 24)
       if name then
@@ -40,7 +57,9 @@ function M.extra(status, showPartner)
     local names = {}
     for i = 1, math.min(#status.pendingRoll, 2) do
       local row = status.pendingRoll[i]
-      names[#names + 1] = type(row) == "table" and (clean(row.chunkName, 24) or clean(row.chunkId, 12)) or "?"
+      local label = type(row) == "table" and (clean(row.chunkName, 24) or clean(row.chunkId, 12)) or "?"
+      local note = type(row) == "table" and rollSummaryText(row.summary)
+      names[#names + 1] = note and (label .. " (" .. note .. ")") or label
     end
     lines[#lines + 1] = "Roll waiting: " .. table.concat(names, " or ")
   end
@@ -128,7 +147,7 @@ function M.new(store, changed, openTasks, syncNow)
         scrollable = false,
         onClose = function()
           store:set("showPanel", "Bool", false)
-          changed()
+          if changed then changed() end
         end})
       self.window = window
       self.x = x

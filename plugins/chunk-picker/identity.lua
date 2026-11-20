@@ -7,6 +7,7 @@ M.MISMATCH = "Key saved on another character; see Settings"
 M.WAITING = "Waiting for your character name"
 M.STORAGE = "Can't check which character owns the key; paused"
 M.UNFINISHED = "Key save didn't finish; save the key again"
+M.UNBOUND = "Key not tied to a character; open Settings to bind it"
 -- Held in keyOwner while Save swaps the key, so a save that stops halfway pauses every
 -- character instead of handing a key to the wrong one.
 -- Display names are at most 12 letters, digits, spaces, hyphens or underscores, so this
@@ -45,16 +46,10 @@ function M.new(store)
       return M.UNFINISHED
     end
     if owner == nil or owner == "" then
-      -- A key saved before keys were bound belongs to the first character that uses it,
-      -- but only once that binding is stored.
-      store:set("keyOwner", "String", name)
-      local saved, stored = store:read("keyOwner", "String")
-      if not saved or stored ~= name then
-        self.state = "binding not saved"
-        return M.STORAGE
-      end
-      self.state = "bound now"
-      return nil
+      -- Never auto-bind an unbound key: require explicit confirmation in Settings so a
+      -- second character sharing storage cannot hijack another character's key.
+      self.state = "unbound"
+      return M.UNBOUND
     end
     if owner ~= name then
       self.state = "other character"
@@ -72,14 +67,21 @@ local function wrote(store, name, value)
   local ok, stored = store:read(name, "String")
   return ok and stored == value
 end
--- Saves a new key for the current character (or for whoever uses it first when no name is
--- known yet). Returns nil when saved, or the reason it wasn't.
+-- Saves a new key for the currently logged-in character. Refuses if no character is
+-- identified yet so an unbound key cannot later be claimed by another character.
 function M.save(store, key)
+  local name = M.current()
+  if not name then return "Log in to the character before saving a key" end
   if not wrote(store, "keyOwner", M.PENDING) then return "Couldn't save the key; try again" end
   if not wrote(store, "personalKey", key) then return "Couldn't save the key; try again" end
-  if not wrote(store, "keyOwner", M.current() or "") then
+  if not wrote(store, "keyOwner", name) then
     return "Key saved but not tied to this character; Save again"
   end
+end
+-- Explicitly binds an existing key to `name` with read-back verification.
+function M.bind(store, name)
+  if type(name) ~= "string" or name == "" then return false end
+  return wrote(store, "keyOwner", name)
 end
 -- Each manifest server keeps its own key and owner. The selected server's pair stays in
 -- personalKey and keyOwner, so a key saved before servers had their own belongs to the one

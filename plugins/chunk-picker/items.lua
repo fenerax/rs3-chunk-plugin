@@ -145,8 +145,11 @@ local function binding(store)
     end
   end
 end
+local WORLDS = {live = true, beta = true, unknown = true}
+local nextJournalSeed = 0
+local function cleanWorld(world) return WORLDS[world] and world or nil end
 -- A stored journal, or nil unless every part checks out: right owner, a 16-hex-digit id, and
--- events [n, id, label] numbered upwards and below `next`.
+-- events [n, id, label, world?] numbered upwards and below `next`.
 local function parse(text, name)
   local value = json.decode(text)
   if type(value) ~= "table" or type(value.owner) ~= "string" or #value.owner > 80
@@ -158,10 +161,12 @@ local function parse(text, name)
   for _, event in ipairs(value.events) do
     local n, id = math.tointeger(event[1]), math.tointeger(event[2])
     local label = type(event[3]) == "string" and achievements.clean(event[3], 80)
-    if not n or n <= last or n >= nextEvent or not id or id < 0 or id > M.MAX_ID or not label then
+    local world = event[4] == nil and nil or cleanWorld(event[4])
+    if not n or n <= last or n >= nextEvent or not id or id < 0 or id > M.MAX_ID or not label
+      or (event[4] ~= nil and not world) then
       return nil
     end
-    events[#events + 1] = {n, id, label}
+    events[#events + 1] = world and {n, id, label, world} or {n, id, label}
     last = n
   end
   if #events > M.JOURNAL then return nil end
@@ -197,7 +202,10 @@ local function encoded(journals)
   local entries = json.array()
   for _, journal in ipairs(journals) do
     local events = json.array()
-    for i, event in ipairs(journal.events) do events[i] = json.array({event[1], event[2], event[3]}) end
+    for i, event in ipairs(journal.events) do
+      events[i] = event[4] and json.array({event[1], event[2], event[3], event[4]})
+        or json.array({event[1], event[2], event[3]})
+    end
     entries[#entries + 1] = {id = journal.id, owner = journal.owner, destination = journal.destination,
       next = journal.next, events = events}
   end
@@ -227,6 +235,23 @@ function M.new(store)
     local readable, saved = store:read(M.KEY, "String")
     self.saved = self.saved and readable and saved == text
   end
+  local function freshId(now, name, destination, existing)
+    local taken = {}
+    if existing then
+      for _, journal in ipairs(existing) do taken[journal.id] = true end
+    end
+    if self.journal and self.journal.id then taken[self.journal.id] = true end
+    local wall = os and type(os.time) == "function" and select(2, pcall(os.time)) or ""
+    local clk = os and type(os.clock) == "function" and select(2, pcall(os.clock)) or ""
+    local candidate
+    repeat
+      nextJournalSeed = nextJournalSeed + 1
+      candidate = hex16(tostring(now) .. "|" .. tostring(wall) .. "|" .. tostring(clk) .. "|"
+        .. tostring(nextJournalSeed) .. "|" .. tostring(name) .. "|" .. tostring(destination) .. "|"
+        .. tostring(math.random and math.random() or 0) .. "|" .. tostring(self.journal and self.journal.id))
+    until not taken[candidate]
+    return candidate
+  end
   -- Loads this character's journal, or starts a new one with a fresh id. A journal that can't
   -- be read stays in memory only, so it never overwrites one that might still be there.
   function self:open(now)
@@ -235,8 +260,7 @@ function M.new(store)
     self.bindingOwner, self.destination = name, destination
     self:resend()
     self.lastWorn, self.journals, self.retentionFull, self.full = nil, nil, false, false
-    local fresh = {id = hex16(tostring(now) .. "|" .. tostring(math.random and math.random() or 0)
-        .. "|" .. tostring(self.journal and self.journal.id)),
+    local fresh = {id = freshId(now, name, destination),
       owner = name, destination = destination, next = 1, events = {}}
     if not name then
       self.journal = fresh
@@ -276,13 +300,15 @@ function M.new(store)
       self.journal.owner = nil -- new observations remain in memory; old journals stay on disk
       return
     end
+    fresh.id = freshId(now, name, destination, journals)
     journals[#journals + 1] = fresh
     self.journal = fresh
     self:save()
   end
   -- Journals items newly worn since the last read that aren't already listed.
-  function self:note(rows)
+  function self:note(rows, world)
     local journal, worn, changed = self.journal, {}, false
+    local env = cleanWorld(world)
     -- Slot order, so the same outfit always gets the same event numbers.
     for _, row in ipairs(rows) do
       local id, name = row[2], row[4]
@@ -295,7 +321,8 @@ function M.new(store)
           if #journal.events >= M.JOURNAL then
             self.full = true
           else
-            journal.events[#journal.events + 1] = {journal.next, id, name}
+            journal.events[#journal.events + 1] = env and {journal.next, id, name, env}
+              or {journal.next, id, name}
             journal.next = journal.next + 1
             changed = true
           end
@@ -306,8 +333,9 @@ function M.new(store)
     self.lastWorn = worn
     if changed then self:save() end
   end
-  function self:readNow(now)
+  function self:readNow(now, world)
     self.readAt, self.promptAt = now, nil
+    if world ~= nil then self.lastWorld = cleanWorld(world) end
     self:open(now)
     local worn, wornVia = M.container(M.WORN)
     local backpack, backpackVia = M.container(M.BACKPACK)
@@ -319,30 +347,31 @@ function M.new(store)
     end
     self.worn, self.backpack, self.pouch, self.toolbelt = worn, backpack, pouch, M.belt(self.beltVars)
     self.via = {worn = wornVia, backpack = backpackVia, pouch = pouchVia}
-    if worn then self:note(worn) end
+    if worn then self:note(worn, world ~= nil and world or self.lastWorld) end
     self.read = true
     self.state = (worn or backpack) and "read" or "unavailable"
   end
-  function self:login(now)
+  function self:login(now, world)
     self:reset()
-    self:readNow(now)
+    self:readNow(now, world)
   end
   -- Inventory events fire for every container, so they only bring the next read forward.
   function self:inventory(now)
     if self.readAt then self.promptAt = self.promptAt or now + M.DELAY end
   end
-  function self:tick(now)
+  function self:tick(now, world)
+    if world ~= nil then self.lastWorld = cleanWorld(world) end
     if (self.promptAt and now >= self.promptAt) or (self.readAt and now - self.readAt >= M.PERIOD) then
-      self:readNow(now)
+      self:readNow(now, world ~= nil and world or self.lastWorld)
     end
   end
   -- The items field for the next report, or nil when the picker has this reading and journal.
-  -- extras.pouch and extras.toolbelt add those fields, for a picker that accepts them. The
-  -- snapshot names exactly the containers sent.
+  -- extras.pouch, extras.toolbelt and extras.world add those fields, for a picker that accepts
+  -- them. The snapshot names exactly the containers sent.
   function self:pending(now, extras)
     if not self.read or (self.refusedUntil and now < self.refusedUntil) then return nil end
     local name, destination = binding(store)
-    if name ~= self.bindingOwner or destination ~= self.destination then self:readNow(now) end
+    if name ~= self.bindingOwner or destination ~= self.destination then self:readNow(now, self.lastWorld) end
     -- A mismatched/unreadable binding never uploads even its memory-only journal.
     if not self.bindingOwner then return nil end
     extras = extras or {}
@@ -364,7 +393,11 @@ function M.new(store)
     if key == self.sentKey and now - self.sentAt < M.RESEND then return nil end
     local events = json.array()
     for _, event in ipairs(journal.events) do
-      if event[1] > ackedEvent then events[#events + 1] = json.array({event[1], event[2], event[3]}) end
+      if event[1] > ackedEvent then
+        events[#events + 1] = extras.world and event[4]
+          and json.array({event[1], event[2], event[3], event[4]})
+          or json.array({event[1], event[2], event[3]})
+      end
     end
     local items = {snapshot = self.snapshot,
       worn = self.worn or json.null, backpack = self.backpack or json.null,

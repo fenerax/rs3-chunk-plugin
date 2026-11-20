@@ -33,23 +33,44 @@ end
 -- dropped row can't make the window ask for the same rows again.
 function M.list(data)
   if type(data) ~= "table" or data.v ~= 1 or type(data.ready) ~= "boolean" then return nil end
+  local done = type(data.done) == "table" and data.done or nil
   return {ready = data.ready, stale = data.stale == true, hereKnown = data.hereKnown == true,
     chunkId = clean(data.chunkId, 12), here = rows(data.here, 50), all = rows(data.all, M.CHUNK),
     allFrom = math.type(data.allFrom) == "integer" and data.allFrom >= 0 and data.allFrom or nil,
     allHeld = type(data.all) == "table" and math.min(#data.all, M.CHUNK) or 0,
-    hereCount = count(data.hereCount), allCount = count(data.allCount)}
+    hereCount = count(data.hereCount), allCount = count(data.allCount),
+    done = done and {
+      here = rows(done.here, 20), all = rows(done.all, 20),
+      hereCount = count(done.hereCount), allCount = count(done.allCount),
+      hereKnown = done.hereKnown == true,
+    } or nil}
 end
 -- One display line: category, a middle dot, the label, then the level in brackets.
 function M.row(row)
   return (row.category ~= "" and (row.category .. " · ") or "") .. row.label
     .. (row.level and (" (" .. row.level .. ")") or "")
 end
--- The header line and one page of rows for a view ("here" or "all"); `size` rows a page.
+-- The header line and one page of rows for a view ("here", "all", or "done"); `size` rows a page.
 -- When the picker pages ("all" with `allFrom`), pages run over the whole list and a page outside
 -- the rows held returns a fifth value: the `from` to ask for.
 function M.page(list, view, page, message, size)
   size = size or M.ROWS
   if not list then return message or "Loading tasks…", {}, 1, 1 end
+  if view == "done" then
+    if not list.done then
+      return "Recent completed tasks are not provided by this picker.", {}, 1, 1
+    end
+    local shown, total = list.done.all, list.done.allCount
+    local pages = math.max(1, math.ceil(#shown / size))
+    page = math.max(1, math.min(page, pages))
+    local out = {}
+    local first, last = (page - 1) * size + 1, math.min(#shown, page * size)
+    for i = first, last do out[#out + 1] = M.row(shown[i]) end
+    local head = total == 0 and "No tasks completed in the last 7 days."
+      or ("Recent done: " .. total .. (pages > 1 and (" · page " .. page .. "/" .. pages) or ""))
+    if message then head = head .. " · " .. message end
+    return head, out, page, pages, nil
+  end
   if not list.ready then
     return "No saved task list yet. Open your tasks in the picker once.", {}, 1, 1
   end
@@ -86,7 +107,7 @@ function M.page(list, view, page, message, size)
 end
 function M.new(store)
   local self = {page = 1, view = store:get("tasksView", "String", "here")}
-  if self.view ~= "here" and self.view ~= "all" then self.view = "here" end
+  if self.view ~= "here" and self.view ~= "all" and self.view ~= "done" then self.view = "here" end
   function self:isOpen() return store:get("tasksWindow", "Bool", false) end
   function self:open()
     store:set("tasksWindow", "Bool", true)
@@ -162,6 +183,8 @@ function M.new(store)
         {inline = true, tooltip = "Your whole active list"})
       window:AddSimpleButton("Back", function() self.page = math.max(1, self.page - 1) end, {inline = true})
       window:AddSimpleButton("More", function() self.page = self.page + 1 end, {inline = true})
+      window:AddSimpleButton("Done", function() choose("done") end,
+        {inline = true, tooltip = "Tasks finished in the last 7 days"})
       self.head = window:AddText({text = "Loading tasks…", height = 36, maxLines = 2})
       self.lines = {}
       for i = 1, self.rows do
@@ -189,7 +212,9 @@ function M.new(store)
     self.page = page
     self.wantFrom = want
     pcall(function()
-      self.window:SetTitle(self.view == "here" and "Chunk tasks: here" or "Chunk tasks: all active")
+      self.window:SetTitle(self.view == "here" and "Chunk tasks: here"
+        or self.view == "done" and "Chunk tasks: recent done"
+        or "Chunk tasks: all active")
       self.head.content = head
       for i = 1, #self.lines do self.lines[i].content = lines[i] or "" end
     end)

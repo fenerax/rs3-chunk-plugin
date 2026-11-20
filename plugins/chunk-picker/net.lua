@@ -110,7 +110,14 @@ function M.build(seq, epoch, world, position, skills, quests, diagnostics, achie
     end
     body = json.encode(payload)
   end
-  assert(#body <= M.MAX_BODY, "Report exceeds 16 KB")
+  if #body > M.MAX_BODY and payload.skills then
+    payload.skills = nil
+    warning = warning or "Report exceeds 16 KB; skills held"
+    body = json.encode(payload)
+  end
+  if #body > M.MAX_BODY then
+    return nil, payload, "Report exceeds 16 KB; held locally"
+  end
   return body, payload, warning
 end
 
@@ -173,7 +180,7 @@ function M.new(options)
   end
   -- A quest snapshot that was too large to send stays held until it changes.
   function self:filterQuests(quests)
-    if quests and self.heldQuestJSON == json.encode(quests) then return nil end
+    if quests and self.heldQuestJSON and self.heldQuestJSON == json.encode(quests) then return nil end
     return quests
   end
   function self:ready(now) return not self.busy and not self.blocked and now >= self.nextAt end
@@ -309,9 +316,13 @@ function M.new(options)
     if options.saveSequence then options.saveSequence(self.sequence) end
     local body, payload, warning = M.build(self.sequence, epoch, world, position, skills, quests,
       diagnostics, achievements, items, bank)
+    if warning then self.payloadWarning = warning elseif quests then self.payloadWarning = nil end
     if quests then
-      self.payloadWarning = warning
       self.heldQuestJSON = not payload.quests and json.encode(quests) or nil
+    end
+    if not body then
+      if done then done(false, payload, nil, 413) end
+      return false
     end
     return self:requestHTTP(now, handle, key, "POST", body, function(ok, status, code)
       if done then done(ok, payload, status, code) end

@@ -307,5 +307,17 @@ local initialEvents = #savedJournal().events
 tracker:sent(key, 2000); tracker:sync({items = {snapshot = body.snapshot, journal = {id = body.journal.id, event = 1000}}}, 2001)
 eq(#savedJournal().events, initialEvents - #body.journal.events, "only delivered events leave the trimmed reading")
 assert(tracker:pending(2100, {pouch = true, toolbelt = true}), "omitted events remain retryable")
+-- 4-field item-journal-world: recorded per observation, persisted across reload, sent only when accepted.
+values.itemJournal = nil
+invs[93] = inv({slot(857, "Yew shortbow")}); invs[94] = inv({slot(34830, "Gud raider chainbody")})
+tracker = items.new(store); tracker:login(3000, "live")
+body = tracker:pending(3000)
+eq(#body.journal.events[1], 3, "older picker gets 3-field journal event")
+body = tracker:pending(3000, {world = true})
+eq(#body.journal.events[1], 4, "accepting picker gets 4-field journal event")
+eq(body.journal.events[1][4], "live", "observation environment preserved")
+tracker = items.new(store); tracker:login(3001, "beta")
+body = tracker:pending(3001, {world = true})
+eq(body.journal.events[1][4], "live", "persisted world survives reload")
 var = nil
 print("items tests passed")
