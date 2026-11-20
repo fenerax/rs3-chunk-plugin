@@ -36,10 +36,15 @@ who = 'Alpha'; assert(check:check(key()) == nil)
 assert(select('home') == nil and key() == 'bravokey' and check:check(key()) == identity.MISMATCH)
 who = 'Bravo'; assert(check:check(key()) == nil)
 
--- An unbound key stays unbound across switches, so the first character to use it still gets it.
+-- An unbound key stays unbound across switches and pauses until explicitly bound.
 values.keyOwner = ''
 assert(select('scratch') == nil and values.keyOwner_home == '')
-assert(select('home') == nil and values.keyOwner == '' and check:check(key()) == nil and values.keyOwner == 'Bravo')
+assert(select('home') == nil and values.keyOwner == '' and check:check(key()) == identity.UNBOUND and values.keyOwner == '')
+assert(identity.bind(store, 'Bravo') and check:check(key()) == nil and values.keyOwner == 'Bravo')
+-- Saving a key before a character is identified refuses instead of storing an unbound key.
+who = nil
+assert(identity.save(store, 'preloginkey') ~= nil and key() == 'bravokey' and values.keyOwner == 'Bravo')
+who = 'Bravo'
 
 -- Forget removes only the selected server's key, and any parked copy of it.
 assert(store:forget() and store:forget(identity.parked('home')))

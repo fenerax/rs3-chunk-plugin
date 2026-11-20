@@ -36,6 +36,20 @@ eq(held.quests,nil); assert(warning)
 local many=json.array(); for i=1,501 do many[i]='q'..i end
 local _,overCount,countWarning=net.build(3,1792411200,nil,pos,nil,{finished=many,started=json.array()})
 eq(overCount.quests,nil); assert(countWarning)
+-- Oversized standalone payload returns nil + warning instead of throwing and freezing ServerLogic.
+local giant={snapshot='0123456789abcdef',part=1,parts=1,age=0,rows=json.array()}
+for i=1,1200 do giant.rows[i]=json.array({i,2147483647}) end
+local oversizedBody,_,oversizedWarn=net.build(4,1792411200,nil,pos,nil,nil,nil,nil,nil,giant)
+eq(oversizedBody,nil); assert(oversizedWarn)
+-- Panel extra shows up to 4 partners (5-player GIM) and Roll 2 summary when provided.
+local panel=require('panel')
+local extra=panel.extra({
+  partners={{name='P1',chunkId='1',chunkName='A'},{name='P2',chunkId='2',chunkName='B'},
+    {name='P3',chunkId='3',chunkName='C'},{name='P4',chunkId='4',chunkName='D'}},
+  pendingRoll={{chunkId='12593',chunkName='Draynor',summary={newTasks={skills=2,quests=1,diaries=0,other=0},highlights={'Bank'}}}},
+},true)
+assert(extra:find('P4: D %(4%)'),extra)
+assert(extra:find('Draynor %(%+3 tasks: Bank%)'),extra)
 local request,callback,clock,created= nil,nil,0,0
 HTTPRequest={new=function(handle,path)
   created=created+1

@@ -65,4 +65,11 @@ assert(tasks.page(stale, 'here', 1) == 'No active tasks in this chunk. · saved 
 assert(tasks.page(stale, 'all', 1, 'picker asked to slow down') == 'No active tasks. · saved before your last change · picker asked to slow down')
 assert(tasks.page(nil, 'here', 1) == 'Loading tasks…')
 assert(tasks.page(nil, 'here', 1, 'Open plugin Settings') == 'Open plugin Settings')
+-- Recent done tasks (7-day window from the picker) page independently and tolerate older pickers.
+assert(tasks.page(parsed, 'done', 1) == 'Recent completed tasks are not provided by this picker.')
+local withDone = decode('{"v":1,"ready":true,"hereKnown":true,"here":[],"all":[],"hereCount":0,"allCount":0,'
+  .. '"done":{"here":[],"all":[{"id":"d1","label":"Cook shrimp","category":"Cooking","level":1,"done":true,"doneAt":"2026-11-18T12:00:00Z"}],'
+  .. '"hereCount":0,"allCount":1,"hereKnown":true}}')
+local dh, dr = tasks.page(withDone, 'done', 1)
+assert(dh == 'Recent done: 1' and #dr == 1 and dr[1] == 'Cooking · Cook shrimp (1)', dh)
 print('tasks tests passed')

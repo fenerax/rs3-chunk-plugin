@@ -74,6 +74,9 @@ local count = 0
 for _, p in ipairs(b.parts) do count = count + #p end
 eq(count, 1920, "every row once"); eq(total, 4)
 b:sync({bank = {snapshot = b.snapshot}}, 11); eq(b:pending(12), nil, "complete")
+-- A server/key switch resends even an already-acknowledged bank.
+b:resend(); part = b:pending(12); assert(part and part.part == 1, "resend clears acked state")
+b:partSent(part, 12); b:sync({bank = {snapshot = b.snapshot}}, 12); b.sent = #b.parts; b:sync({bank = {snapshot = b.snapshot}}, 12)
 -- A picker that forgets a set it held gets it again from part 1.
 b:sync({state = "locked"}, 13); part = b:pending(13); assert(part and part.part == 1, "a forgotten set goes again")
 -- Too many to send is held with a warning, and an older set is dropped.

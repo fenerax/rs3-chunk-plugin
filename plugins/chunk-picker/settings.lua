@@ -266,9 +266,9 @@ function M.new(store, callbacks, options)
           self:message("Save the key again first")
           return
         end
-        local saved = store:set("keyOwner", "String", name)
+        local saved = identity.bind(store, name)
         callbacks.connectionChanged()
-        self:message(saved and "Key now used on this character" or "Couldn't save that; try again")
+        self:message(saved and ("Key now used on " .. name) or "Couldn't save that; try again")
       end)
       self.result = page:AddText({text = "Save your key, then test the connection.",
         height = 48, maxLines = 2})
@@ -295,7 +295,7 @@ function M.new(store, callbacks, options)
         {"shadeGrid", "Lines between locked chunks"},
         {"warnLocked", "Warn when I walk into a locked chunk"},
         {"warnRoll", "Tell me when a roll is waiting"},
-        {"showPartner", "Show my partner on the panel"},
+        {"showPartner", "Show my group on the panel"},
       }, true)
       choiceRow(page, "shadeWidth", "Line width", "normal",
         {{"thin", "Thin"}, {"normal", "Normal"}, {"thick", "Thick"}})
@@ -310,7 +310,7 @@ function M.new(store, callbacks, options)
         {{"haze", "Haze box"}, {"ground", "Ground only"}})
       choiceRow(page, "shadeFillStrength", "Fill strength", "strong",
         {{"light", "Light"}, {"medium", "Medium"}, {"strong", "Strong"}, {"solid", "Solid"}})
-      choiceRow(page, "shadePartner", "Chunks only your partner unlocked", "outline",
+      choiceRow(page, "shadePartner", "Chunks only your group unlocked", "outline",
         {{"outline", "Outline"}, {"tint", "Light tint"}, {"off", "Off"}})
       page:AddText("Pick exact colours on the Colours tab.")
     end)

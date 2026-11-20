@@ -461,38 +461,10 @@ function M.new(options)
   function self:describe()
     return self.state .. "; edges=" .. self.edges .. " walls=" .. self.walls .. " fills=" .. (self.fills or 0)
   end
-  -- Temporary: a bright square at the player's feet proves whether instances draw at all,
-  -- and the lines below compare its coordinates with the chunk geometry.
-  function self:marker()
-    if not M.DEBUG or not api() then return end
-    pcall(function()
-      local p = Player.GetEntity().position
-      local floor = Player.GetEntity().coordGrid.level
-      local h = World.GetGroundHeight(floor, math.floor(p.x), math.floor(p.z))
-      self.player = string.format("player=%.0f,%.0f,%.0f ground=%s floor=%s",
-        p.x, p.y, p.z, tostring(h), tostring(floor))
-      local marker = ShapeList.GetInstance(M.NAME .. "-marker")
-      if not marker then
-        marker = ShapeList.CreateInstance(M.NAME .. "-marker")
-        local data = ShapeData.new()
-        data.positions = {Vector3.new(-250, 0, -250), Vector3.new(250, 0, -250),
-          Vector3.new(250, 0, 250), Vector3.new(-250, 0, 250)}
-        data.lines = {0, 1, 1, 2, 2, 3, 3, 0}
-        marker:SetShapeData(data)
-        marker.colour = 0xFFFF00FF
-        marker.lineWidth = 6
-        marker.ignoreDepth = true
-      end
-      marker.translation = Vector3.new(p.x, p.y + 40, p.z)
-      self.markerState = "marker valid=" .. tostring(marker.isValid) .. " data=" .. tostring(marker.hasData)
-        .. " visible=" .. tostring(marker.visible)
-    end)
-  end
   function self:debugLines()
     local lines = {}
     if self.debug then lines[#lines + 1] = "Shading geometry: " .. self.debug end
     if self.player then lines[#lines + 1] = "Shading " .. self.player end
-    if self.markerState then lines[#lines + 1] = "Shading " .. self.markerState end
     if self.shapes[1] then
       pcall(function()
         local shape, at = self.shapes[1], self.shapes[1].translation
@@ -509,7 +481,6 @@ function M.new(options)
   function self:destroy()
     self:clear("stopped")
     for _, shape in ipairs(self.shapes) do pcall(function() ShapeList.DestroyInstance(shape) end) end
-    pcall(function() ShapeList.DestroyInstance(M.NAME .. "-marker") end)
     self.shapes = {}
   end
   return self

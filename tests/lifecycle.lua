@@ -234,7 +234,7 @@ click('Open in a bigger window'); assert(settingsWindow().options.width==700)
 for _,c in ipairs(settingsWindow().children) do assert(c.content~='Large' and c.content~='Small',c.content) end
 settingsWindow().options.onClose(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
 -- Tasks: the panel's Tasks button opens a window that reads the picker's saved list.
-allowed=true; values.personalKey='synthetic'; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
+allowed=true; values.personalKey='synthetic'; values.keyOwner='Alpha'; emit('OptionalPermissionChanged',{permissionName='httpAccess',enabled=true})
 local tasks=require('tasks')
 local function tasksWindow() for i=#windows,1,-1 do if (windows[i].title or ''):find('^Chunk tasks') then return windows[i] end end end
 local function last() return requests[#requests] end
@@ -245,32 +245,36 @@ local tasksButton; for _,c in ipairs(panelWindow().children) do if c.content=='T
 tasksButton.action(); assert(values.tasksWindow==true)
 local tw=tasksWindow(); assert(tw and not tw.destroyed)
 emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic')
-assert(values.keyOwner=='Alpha') -- a key with no owner belongs to the first character that uses it
+assert(values.keyOwner=='Alpha')
 -- Opening asks straight away, before the position report is due.
 assert(last().path=='/api/plugin/v1/tasks')
 last().callback({responseCode=200,data='{"v":1,"ready":true,"stale":false,"stateRevision":5,"chunkId":"13613","hereKnown":true,'..
   '"here":[{"id":"a","label":"Mine copper","category":"Skills","level":5}],'..
-  '"all":[{"id":"a","label":"Mine copper","category":"Skills","level":5},{"id":"b","label":"Visit Nardah","category":"Extra"}],"hereCount":1,"allCount":2}'})
+  '"all":[{"id":"a","label":"Mine copper","category":"Skills","level":5},{"id":"b","label":"Visit Nardah","category":"Extra"}],"hereCount":1,"allCount":2,'..
+  '"done":{"here":[],"all":[{"id":"d1","label":"Cook shrimp","category":"Cooking","level":1,"done":true,"doneAt":"2026-11-18T12:00:00Z"}],"hereCount":0,"allCount":1,"hereKnown":true}}'})
 -- The report that follows changes the picker's chunk, which asks for the list again.
 emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic')
 assert(last().path=='/api/plugin/v1/report'); last().callback({responseCode=200,data='{"state":"locked","chunkId":"13613","chunkName":"Nardah"}'})
 emit('Draw',{timeDeltaSecs=3.1}); emit('ServerLogic'); assert(last().path=='/api/plugin/v1/tasks')
 last().callback({responseCode=200,data='{"v":1,"ready":true,"stale":false,"stateRevision":5,"chunkId":"13613","hereKnown":true,'..
   '"here":[{"id":"a","label":"Mine copper","category":"Skills","level":5}],'..
-  '"all":[{"id":"a","label":"Mine copper","category":"Skills","level":5},{"id":"b","label":"Visit Nardah","category":"Extra"}],"hereCount":1,"allCount":2}'})
+  '"all":[{"id":"a","label":"Mine copper","category":"Skills","level":5},{"id":"b","label":"Visit Nardah","category":"Extra"}],"hereCount":1,"allCount":2,'..
+  '"done":{"here":[],"all":[{"id":"d1","label":"Cook shrimp","category":"Cooking","level":1,"done":true,"doneAt":"2026-11-18T12:00:00Z"}],"hereCount":0,"allCount":1,"hereKnown":true}}'})
 local reports=#requests
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); tw=tasksWindow()
-assert(tw.title=='Chunk tasks: here' and tw.children[5].content=='Here: 1 task',tw.children[5].content)
-assert(tw.children[6].content=='Skills · Mine copper (5)' and tw.children[7].content=='')
+assert(tw.title=='Chunk tasks: here' and tw.children[6].content=='Here: 1 task',tw.children[6].content)
+assert(tw.children[7].content=='Skills · Mine copper (5)' and tw.children[8].content=='')
+tw.children[5].action(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
+assert(tw.title=='Chunk tasks: recent done' and values.tasksView=='done' and tw.children[6].content=='Recent done: 1' and tw.children[7].content=='Cooking · Cook shrimp (1)',tw.children[6].content)
 tw.children[2].action(); emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
-assert(tw.title=='Chunk tasks: all active' and values.tasksView=='all' and tw.children[7].content=='Extra · Visit Nardah')
+assert(tw.title=='Chunk tasks: all active' and values.tasksView=='all' and tw.children[8].content=='Extra · Visit Nardah')
 -- Edge resize: a taller window shows more rows, a wider one more of each label; both are kept.
-assert(tw.options.resizable and #tw.children==5+tasks.ROWS)
+assert(tw.options.resizable and #tw.children==6+tasks.ROWS)
 tw.root:SetSize(520,tasks.CHROME+20*tasks.ROW)
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); assert(tasksWindow()==tw)
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic'); local tall=tasksWindow()
-assert(tall~=tw and tw.destroyed and tall.options.width==520 and #tall.children==5+20,#tall.children)
-assert(values.tasksW==520 and values.tasksH==tasks.CHROME+20*tasks.ROW and tall.children[7].content=='Extra · Visit Nardah')
+assert(tall~=tw and tw.destroyed and tall.options.width==520 and #tall.children==6+20,#tall.children)
+assert(values.tasksW==520 and values.tasksH==tasks.CHROME+20*tasks.ROW and tall.children[8].content=='Extra · Visit Nardah')
 assert(tasks.rowsFor(0)==tasks.MIN_ROWS and tasks.rowsFor(5000)==tasks.MAX_ROWS)
 tw=tall
 -- A picker that pages: More past the rows held asks for them with ?from= at once.
@@ -295,20 +299,20 @@ local function taskAsk()
 end
 local function press(n,button) for _=1,n do tw.children[button].action() end; emit('Draw',{timeDeltaSecs=1.1}); emit('Logic') end
 local ask,steps=taskAsk(); assert(ask.path=='/api/plugin/v1/tasks'); ask.callback(paged(0,124)); emit('Logic')
-assert(tw.children[5].content=='All active: 124 · page 1/7' and tw.children[6].content=='Skills · Task 1',tw.children[5].content)
-press(4,4); assert(tw.children[5].content=='All active: 124 · page 5/7' and tw.children[25].content=='Skills · Task 100')
-press(1,4); assert(tw.children[5].content=='All active: 124 · page 6/7 · loading…' and tw.children[6].content=='',tw.children[5].content)
+assert(tw.children[6].content=='All active: 124 · page 1/7' and tw.children[7].content=='Skills · Task 1',tw.children[6].content)
+press(4,4); assert(tw.children[6].content=='All active: 124 · page 5/7' and tw.children[26].content=='Skills · Task 100')
+press(1,4); assert(tw.children[6].content=='All active: 124 · page 6/7 · loading…' and tw.children[7].content=='',tw.children[6].content)
 ask,steps=taskAsk(); assert(ask.path=='/api/plugin/v1/tasks?from=100' and steps<=2,ask.path..' '..steps)
 ask.callback(paged(100,124)); emit('Logic')
-assert(tw.children[6].content=='Skills · Task 101' and tw.children[25].content=='Skills · Task 120')
-press(1,4); assert(tw.children[5].content=='All active: 124 · page 7/7' and tw.children[9].content=='Skills · Task 124' and tw.children[10].content=='')
+assert(tw.children[7].content=='Skills · Task 101' and tw.children[26].content=='Skills · Task 120')
+press(1,4); assert(tw.children[6].content=='All active: 124 · page 7/7' and tw.children[10].content=='Skills · Task 124' and tw.children[11].content=='')
 -- Back past the rows held asks for the rows ending at that page.
 press(2,3); ask=taskAsk(); assert(ask.path=='/api/plugin/v1/tasks',ask.path); ask.callback(paged(0,124)); emit('Logic')
-assert(tw.children[5].content=='All active: 124 · page 5/7' and tw.children[6].content=='Skills · Task 81')
+assert(tw.children[6].content=='All active: 124 · page 5/7' and tw.children[7].content=='Skills · Task 81')
 -- A refused ?from= (older picker, or a client that drops the query) falls back to the first 100.
 press(1,4); ask=taskAsk(); assert(ask.path=='/api/plugin/v1/tasks?from=100'); ask.callback({responseCode=400,data='{"message":"no"}'})
 ask=taskAsk(); assert(ask.path=='/api/plugin/v1/tasks',ask.path); ask.callback(paged(0,124)); emit('Logic')
-assert(tw.children[5].content=='All active: 124 · page 5/5 · first 100',tw.children[5].content)
+assert(tw.children[6].content=='All active: 124 · page 5/5 · first 100',tw.children[6].content)
 reports=#requests
 -- No new request inside the refresh interval; a picker without the route never blocks reports.
 emit('ServerLogic'); assert(#requests==reports)
@@ -316,7 +320,7 @@ emit('Draw',{timeDeltaSecs=16}); emit('ServerLogic')
 if last().path=='/api/plugin/v1/report' then last().callback({responseCode=200,data='{"state":"locked","chunkId":"13613"}'}); emit('Draw',{timeDeltaSecs=1.1}); emit('ServerLogic') end
 assert(last().path=='/api/plugin/v1/tasks'); last().callback({responseCode=401,data='{"message":"no"}'})
 emit('Draw',{timeDeltaSecs=1.1}); emit('Logic')
-assert(tw.children[5].content:find('no in%-game task list'),tw.children[5].content)
+assert(tw.children[6].content:find('no in%-game task list'),tw.children[6].content)
 local count=#requests; emit('Draw',{timeDeltaSecs=20}); emit('ServerLogic')
 assert(#requests==count or last().path=='/api/plugin/v1/report','a refused task list waits five minutes')
 -- Another character on this PC: everything pauses until the key is moved on purpose.
@@ -344,9 +348,11 @@ sends('reports resume after re-binding')
 -- Storage that can't be read or written never lets another character through.
 broken['get:keyOwner']=true; who='Charlie'; quiet(70,'unreadable owner pauses'); assert(values.keyOwner=='Bravo')
 broken['get:keyOwner']=nil; quiet(70,"still Bravo's key")
-values.keyOwner=nil; broken['set:keyOwner']=true; quiet(70,'an unbound key whose binding fails to save pauses')
-assert(values.keyOwner==nil); broken['set:keyOwner']=nil
-sends('the binding saves on a later try'); assert(values.keyOwner=='Charlie')
+-- An unbound key never auto-binds; it stays paused until explicitly bound in Settings.
+values.keyOwner=nil; quiet(70,'an unbound key stays paused without auto-binding')
+assert(values.keyOwner==nil)
+click('Use key on this character'); assert(values.keyOwner=='Charlie' and settingsLine('Key now used on Charlie'))
+sends('reports resume after explicit bind')
 -- A beta setting that can't be read pauses reports instead of sending them as live.
 broken['get:beta']=true; quiet(70,'an unreadable beta setting pauses reports')
 broken['get:beta']=nil; sends('reports resume once the beta setting reads')
@@ -511,6 +517,13 @@ local refuse=function(b) return b and b.items and {responseCode=400,data='{"mess
 got={}; for _=1,10 do got=withItems(pump(10,refuse)); if #got>0 then break end end
 assert(#got==1,'the refused reading was offered')
 assert(#withItems(pump(1500,itemPicker))==0,'a refused reading waits half an hour')
+assert(#withItems(pump(400,itemPicker))>=1,'then tries again')
+-- HTTP 413 also backs off items for half an hour.
+invs[94]=container(34834,'Gud raider helm'); emit('InventoryUpdated',{})
+local tooLarge=function(b) return b and b.items and {responseCode=413,data='{"message":"too large"}'} or itemPicker(b) end
+got={}; for _=1,10 do got=withItems(pump(10,tooLarge)); if #got>0 then break end end
+assert(#got==1,'the 413 reading was offered')
+assert(#withItems(pump(1500,itemPicker))==0,'a 413 reading waits half an hour')
 assert(#withItems(pump(400,itemPicker))>=1,'then tries again')
 values.sendItems=false; invs[93]=container(1205,'Adamant dagger'); emit('InventoryUpdated',{})
 assert(#withItems(pump(120,itemPicker))==0,'the setting turns items off')

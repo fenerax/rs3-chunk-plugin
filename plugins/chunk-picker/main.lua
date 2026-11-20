@@ -68,6 +68,11 @@ local function onBeta()
   if not ok then return nil end
   return value == true
 end
+local function worldEnv()
+  local beta = onBeta()
+  if beta == nil then return "unknown" end
+  return beta and "beta" or "live"
+end
 local function world()
   -- The public API exposes no current-world number. ID 1 is our fixed companion channel;
   -- beta distinguishes imported/live character copies. No account/character identifier is sent.
@@ -117,13 +122,13 @@ local function syncNow()
   progress:reset()
   progress:login(now)
   achievements:readNow(now)
-  items:readNow(now)
+  items:readNow(now, worldEnv())
   bank:readNow(now)
-  bank:resend()
+  bank:clearRefusal()
   sync:force()
   lastDiagnostics = nil
 end
-panel = require("panel").new(store, function() end, function() tasksWindow:open() end, syncNow)
+panel = require("panel").new(store, nil, function() tasksWindow:open() end, syncNow)
 local settingsCallbacks = {
   connectionChanged = changed,
   openWindow = function() settingsWindow:open() end,
@@ -243,7 +248,7 @@ local function enterGame()
   playing = true
   changed()
   achievements:login(now)
-  items:login(now)
+  items:login(now, worldEnv())
   bank:login(now)
   panel:build()
 end
@@ -320,7 +325,7 @@ subscribe("ServerLogic", function()
   sync:observe(position, now)
   progress:tick(now)
   achievements:tick(now)
-  items:tick(now)
+  items:tick(now, worldEnv())
   bank:tick(now)
   net:tick(now)
   local handle, key = connection()
@@ -333,7 +338,8 @@ subscribe("ServerLogic", function()
   -- Items go after achievements, also alone, and only to a picker that lists them.
   local held, heldKey
   if not part and allowed("sendItems") and net:accepts("items") then
-    held, heldKey = items:pending(now, {pouch = net:accepts("pouch"), toolbelt = net:accepts("toolbelt")})
+    held, heldKey = items:pending(now, {pouch = net:accepts("pouch"), toolbelt = net:accepts("toolbelt"),
+      world = net:accepts("item-journal-world")})
   end
   if held then skills, quests = nil, nil end
   -- Bank parts go last of the three, each alone, under the same items switch.
@@ -349,7 +355,7 @@ subscribe("ServerLogic", function()
     -- Diagnostics ride along at most once a minute, never with achievements or items.
     local lines = not part and not held and not bankPart
       and (not lastDiagnostics or now - lastDiagnostics >= 60) and pickerLines() or nil
-    if held then items:sent(heldKey, now) end
+    if held and net:epoch(now) then items:sent(heldKey, now) end
     net:report(now, handle, key, reportWorld, reported, skills, quests, function(ok, payload, status, code)
       if ok then
         progress:ack(payload.skills, payload.quests)
@@ -364,11 +370,11 @@ subscribe("ServerLogic", function()
           syncing = false
           sync:force(false)
         end
-      elseif code == 400 and payload and payload.achievements then
+      elseif (code == 400 or code == 413) and payload and payload.achievements then
         achievements:refused(now)
-      elseif code == 400 and payload and payload.items then
+      elseif (code == 400 or code == 413) and payload and payload.items then
         items:refused(now)
-      elseif code == 400 and payload and payload.bank then
+      elseif (code == 400 or code == 413) and payload and payload.bank then
         bank:refused(now)
       end
     end, lines, part, held, bankPart)
@@ -388,7 +394,6 @@ subscribe("ServerLogic", function()
     end
   end
   shading:update(position, net.status, now)
-  shading:marker()
   local status = net.status
   -- The locked-chunk banner only trusts a status for the chunk the player is in now.
   local here = position and status and tostring(status.chunkId) == tostring(position.chunk) and status or nil

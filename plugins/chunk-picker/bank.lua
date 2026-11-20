@@ -81,8 +81,14 @@ function M.new()
     self.readAt, self.promptAt, self.refusedUntil, self.warning = nil, nil, nil, nil
     self.state = "not opened yet"
   end
-  -- A new connection starts the set again and forgets an earlier refusal.
+  -- A new connection starts the set again and forgets any earlier acknowledgement or refusal.
   function self:resend()
+    self.refusedUntil = nil
+    self.acked = false
+    if self.parts then self.sent = 0 end
+  end
+  -- Sync now clears an earlier refusal without re-uploading a bank the picker already holds.
+  function self:clearRefusal()
     self.refusedUntil = nil
     if self.parts and not self.acked then self.sent = 0 end
   end
