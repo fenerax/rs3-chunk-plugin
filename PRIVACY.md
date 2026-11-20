@@ -128,8 +128,9 @@ is restored, deletion requests must also be applied to the restored data.
   sees the progress you applied.
 - The picker's administrator (fenerax), who runs the server.
 
-The server's hosting provider stores data for us as a data processor. The cloud
-backup provider stores encrypted backups and cannot read their contents. The
+The server runs on **OVHcloud**, which stores it for us as a data processor
+and may not use it for anything else. The cloud backup provider stores
+encrypted backups and cannot read their contents. The
 data is not sold, shared with advertisers or used for anything other than
 running and recovering your picker.
 
@@ -139,7 +140,8 @@ list, and you can undo them.
 
 ## Where it is stored and how it is protected
 
-- The running server and the administrator's PC backup are in **Canada**.
+- The running server is a virtual private server in OVHcloud's Beauharnois,
+  Quebec data centre. It and the administrator's PC backup are in **Canada**.
   An encrypted cloud backup is stored in the **United States**, as described
   above. If you are in the UK or EU, sending reports to Canada is a transfer
   to a country that the UK and EU recognise as giving adequate protection
@@ -155,7 +157,9 @@ list, and you can undo them.
   with the same picker character.
 - Reports are size- and rate-limited, and anything that doesn't match the
   expected format is rejected.
-- Server administration and connection logs are restricted to the administrator.
+- Only the administrator can log in to the server, with key-based login only.
+  The picker's admin pages are reachable only over a private network, and the
+  connection log is readable only by the administrator.
 
 ## Your choices and rights
 
